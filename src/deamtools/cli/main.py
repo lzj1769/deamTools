@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import logging
 
-from deamtools.utils import get_version
+from deamtools.align.align import run_align
+from deamtools.align.index import run_index
 from deamtools.preprocessing.bam2bw import run_bam2bw
+from deamtools.utils import get_version
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,9 +37,126 @@ def build_parser() -> argparse.ArgumentParser:
         help="Available subcommands (see 'deamtools <command> --help')",
     )
 
+    _add_index_parser(subparsers)
+    _add_align_parser(subparsers)
     _add_bam2bw_parser(subparsers)
 
     return parser
+
+
+def _add_index_parser(subparsers: argparse._SubParsersAction) -> None:
+    parser = subparsers.add_parser(
+        "index",
+        help="Build a deamination-aware BWA index for a reference FASTA.",
+        description=(
+            "Build a doubly-converted BWA index for deamination-aware alignment.\n"
+            "\n"
+            "The index contains two copies of every chromosome: one C-to-T converted\n"
+            "(prefixed 'f') and one G-to-A converted (prefixed 'r'). This lets BWA-MEM\n"
+            "map both top-strand-derived (C->T pattern) and bottom-strand-derived\n"
+            "(G->A pattern in read orientation) deaminated reads against a single index.\n"
+            "\n"
+            "Outputs (next to the input FASTA):\n"
+            "  <fasta>.fai\n"
+            "  <fasta>.deamtools.c2t\n"
+            "  <fasta>.deamtools.c2t.{amb,ann,bwt,pac,sa}\n"
+        ),
+        epilog=(
+            "examples:\n"
+            "  deamtools index --fasta hg38.fa\n"
+            "  deamtools index --fasta hg38.fa --force\n"
+            "\n"
+            "notes:\n"
+            "  * Requires 'bwa' and 'samtools' on PATH.\n"
+            "  * Existing outputs are kept unless --force is given."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--fasta",
+        required=True,
+        metavar="FILE",
+        help="Reference FASTA file to index.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Rebuild even if existing index files are present.",
+    )
+    parser.set_defaults(func=_run_index)
+
+
+def _add_align_parser(subparsers: argparse._SubParsersAction) -> None:
+    parser = subparsers.add_parser(
+        "align",
+        help=(
+            "Align deaminated reads (single- or paired-end) to a reference indexed "
+            "with 'deamtools index'."
+        ),
+        description=(
+            "Align deaminated sequencing reads to a deamtools-indexed reference.\n"
+            "\n"
+            "Reads are converted on the fly (read 1: C->T, read 2: G->A for paired-end)\n"
+            "and aligned with BWA-MEM to the doubly-converted reference produced by\n"
+            "'deamtools index'. Original read sequences are restored in the output BAM,\n"
+            "which is sorted and indexed."
+        ),
+        epilog=(
+            "examples:\n"
+            "  # Paired-end\n"
+            "  deamtools align --fasta hg38.fa --fastq1 r1.fq.gz --fastq2 r2.fq.gz \\\n"
+            "      --output sample.bam --threads 8\n"
+            "\n"
+            "  # Single-end with a read group\n"
+            "  deamtools align --fasta hg38.fa --fastq1 reads.fq.gz \\\n"
+            "      --read_group '@RG\\tID:s1\\tSM:sample1\\tLB:lib1\\tPL:ILLUMINA' \\\n"
+            "      --output sample.bam\n"
+            "\n"
+            "notes:\n"
+            "  * Run 'deamtools index --fasta <ref>' once before aligning.\n"
+            "  * Requires 'bwa' and 'samtools' on PATH."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--fasta",
+        required=True,
+        metavar="FILE",
+        help="Reference FASTA. Must have been indexed with 'deamtools index'.",
+    )
+    parser.add_argument(
+        "--fastq1",
+        required=True,
+        metavar="FILE",
+        help="FASTQ for read 1 (or for single-end reads). Plain or gzipped.",
+    )
+    parser.add_argument(
+        "--fastq2",
+        metavar="FILE",
+        help="FASTQ for read 2 (paired-end). Omit for single-end alignment.",
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        metavar="FILE",
+        help="Output sorted BAM file. Parent directories are created automatically.",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        metavar="INT",
+        help="Total threads, split between bwa mem and samtools sort. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--read_group",
+        metavar="STR",
+        help=(
+            "Read group line passed to 'bwa mem -R', e.g. "
+            "'@RG\\tID:s1\\tSM:sample1\\tLB:lib1\\tPL:ILLUMINA'."
+        ),
+    )
+    parser.set_defaults(func=_run_align)
 
 
 def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -154,6 +273,23 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
     )
 
     parser.set_defaults(func=_run_bam2bw)
+
+
+def _run_index(args: argparse.Namespace) -> int:
+    run_index(fasta_path=args.fasta, force=args.force)
+    return 0
+
+
+def _run_align(args: argparse.Namespace) -> int:
+    run_align(
+        fasta_path=args.fasta,
+        fastq1=args.fastq1,
+        fastq2=args.fastq2,
+        output_bam=args.output,
+        threads=args.threads,
+        read_group=args.read_group,
+    )
+    return 0
 
 
 def _run_bam2bw(args: argparse.Namespace) -> int:
