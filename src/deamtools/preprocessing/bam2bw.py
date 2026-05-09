@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
+import pandas as pd
 import pyBigWig
 import pysam
 
@@ -12,27 +14,72 @@ from deamtools.utils import get_chrom_sizes_from_bam, get_chrom_sizes_from_file
 
 logger = logging.getLogger(__name__)
 
+# Per the UCSC BED spec a record has 3 required and up to 9 optional columns.
+# https://en.wikipedia.org/wiki/BED_(file_format)
+BED_COLUMNS: tuple[str, ...] = (
+    "chrom", "start", "end", "name", "score", "strand",
+    "thickStart", "thickEnd", "itemRgb",
+    "blockCount", "blockSizes", "blockStarts",
+)
 
-def _load_regions(bed_path: str) -> dict[str, list[tuple[int, int]]]:
-    regions: dict[str, list[tuple[int, int]]] = {}
+
+def _load_regions(bed_path: str) -> pd.DataFrame:
+    """Load a BED file and return non-overlapping merged intervals as a DataFrame.
+
+    Recognises the UCSC BED format: the first three columns (``chrom``,
+    ``start``, ``end``) are required and 0-based half-open; up to nine optional
+    columns may follow. Lines starting with ``#``, ``track``, or ``browser``
+    and blank lines are skipped.
+
+    Returned DataFrame has columns ``chrom``, ``start``, ``end``, sorted by
+    chromosome then position, with overlapping or adjacent intervals on the
+    same chromosome merged to prevent double-counting downstream.
+    """
     with open(bed_path) as f:
-        for line in f:
-            if line.startswith("#") or not line.strip():
-                continue
-            fields = line.strip().split("\t")
-            chrom, start, end = fields[0], int(fields[1]), int(fields[2])
-            regions.setdefault(chrom, []).append((start, end))
-    # Merge overlapping intervals to avoid double-counting reads
-    for chrom in regions:
-        ivs = sorted(regions[chrom])
-        merged: list[tuple[int, int]] = [ivs[0]]
-        for start, end in ivs[1:]:
-            if start <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        cleaned = "".join(
+            line for line in f
+            if line.strip() and not line.startswith(("#", "track", "browser"))
+        )
+
+    if not cleaned:
+        return pd.DataFrame(columns=["chrom", "start", "end"])
+
+    df = pd.read_csv(
+        io.StringIO(cleaned),
+        sep="\t",
+        header=None,
+        usecols=[0, 1, 2],
+        names=["chrom", "start", "end"],
+        dtype={"chrom": str, "start": "Int64", "end": "Int64"},
+    )
+
+    if df[["start", "end"]].isna().any().any():
+        raise ValueError(f"BED file has non-integer start/end values: {bed_path}")
+    df = df.astype({"start": int, "end": int})
+
+    bad = df["start"] > df["end"]
+    if bad.any():
+        row = df.loc[bad].iloc[0]
+        raise ValueError(
+            f"BED file has interval with start > end: "
+            f"{row['chrom']}:{row['start']}-{row['end']} ({bed_path})"
+        )
+
+    df = df.sort_values(["chrom", "start", "end"], kind="stable").reset_index(drop=True)
+
+    merged: list[tuple[str, int, int]] = []
+    for chrom, group in df.groupby("chrom", sort=False):
+        cur_start, cur_end = int(group.iat[0, 1]), int(group.iat[0, 2])
+        for s, e in zip(group["start"].iloc[1:], group["end"].iloc[1:]):
+            s, e = int(s), int(e)
+            if s <= cur_end:
+                cur_end = max(cur_end, e)
             else:
-                merged.append((start, end))
-        regions[chrom] = merged
-    return regions
+                merged.append((chrom, cur_start, cur_end))
+                cur_start, cur_end = s, e
+        merged.append((chrom, cur_start, cur_end))
+
+    return pd.DataFrame(merged, columns=["chrom", "start", "end"])
 
 
 def _count_deamination_on_chrom(
@@ -158,14 +205,24 @@ def run_bam2bw(
         with pysam.AlignmentFile(bam_path, "rb") as bam:
             chrom_sizes = get_chrom_sizes_from_bam(bam)
 
-    bed_regions: dict[str, list[tuple[int, int]]] | None = None
+    bed_regions: pd.DataFrame | None = None
+    regions_by_chrom: dict[str, list[tuple[int, int]]] = {}
     if bed_path is not None:
         logger.info(f"Regions: {bed_path}")
         bed_regions = _load_regions(bed_path)
-        logger.info(f"  {sum(len(v) for v in bed_regions.values())} intervals on "
-                    f"{len(bed_regions)} chromosome(s)")
+        for chrom, group in bed_regions.groupby("chrom", sort=False):
+            regions_by_chrom[str(chrom)] = list(
+                zip(group["start"].astype(int), group["end"].astype(int))
+            )
+        logger.info(
+            f"  {len(bed_regions)} interval(s) on "
+            f"{bed_regions['chrom'].nunique()} chromosome(s)"
+        )
 
-    chroms_to_process = [c for c in chrom_sizes if bed_regions is None or c in bed_regions]
+    chroms_to_process = [
+        c for c in chrom_sizes
+        if bed_regions is None or c in regions_by_chrom
+    ]
     logger.info(f"Processing {len(chroms_to_process)} chromosome(s) "
                 f"with {threads} thread(s)")
 
@@ -174,7 +231,7 @@ def run_bam2bw(
     results: dict[str, np.ndarray] = {}
 
     def _process(chrom: str) -> tuple[str, np.ndarray]:
-        regions = bed_regions.get(chrom) if bed_regions is not None else None
+        regions = regions_by_chrom.get(chrom) if bed_regions is not None else None
         return _count_deamination_on_chrom(
             bam_path=bam_path,
             fasta_path=fasta_path,

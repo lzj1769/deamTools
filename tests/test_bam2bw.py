@@ -2,6 +2,7 @@
 
 import os
 
+import pandas as pd
 import pyBigWig
 import pysam
 import pytest
@@ -89,32 +90,88 @@ def chrom_sizes_file(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _expect(rows):
+    return pd.DataFrame(rows, columns=["chrom", "start", "end"])
+
+
 class TestLoadRegions:
     def test_basic(self, tmp_path):
         bed = tmp_path / "r.bed"
         bed.write_text("chr1\t0\t5\n")
-        assert _load_regions(str(bed)) == {"chr1": [(0, 5)]}
+        result = _load_regions(str(bed))
+        assert isinstance(result, pd.DataFrame)
+        pd.testing.assert_frame_equal(result, _expect([("chr1", 0, 5)]))
 
     def test_overlapping_intervals_merged(self, tmp_path):
         bed = tmp_path / "r.bed"
         bed.write_text("chr1\t0\t5\nchr1\t3\t8\n")
-        assert _load_regions(str(bed)) == {"chr1": [(0, 8)]}
+        pd.testing.assert_frame_equal(
+            _load_regions(str(bed)), _expect([("chr1", 0, 8)])
+        )
+
+    def test_adjacent_intervals_merged(self, tmp_path):
+        # End of one == start of next: BED is half-open, but treating these as
+        # a contiguous region prevents double-counting reads at the boundary.
+        bed = tmp_path / "r.bed"
+        bed.write_text("chr1\t0\t5\nchr1\t5\t8\n")
+        pd.testing.assert_frame_equal(
+            _load_regions(str(bed)), _expect([("chr1", 0, 8)])
+        )
 
     def test_non_overlapping_intervals_kept(self, tmp_path):
         bed = tmp_path / "r.bed"
         bed.write_text("chr1\t0\t3\nchr1\t5\t8\n")
-        assert _load_regions(str(bed)) == {"chr1": [(0, 3), (5, 8)]}
+        pd.testing.assert_frame_equal(
+            _load_regions(str(bed)),
+            _expect([("chr1", 0, 3), ("chr1", 5, 8)]),
+        )
 
     def test_comment_lines_skipped(self, tmp_path):
         bed = tmp_path / "r.bed"
         bed.write_text("# header\nchr1\t0\t5\n")
-        assert _load_regions(str(bed)) == {"chr1": [(0, 5)]}
+        pd.testing.assert_frame_equal(
+            _load_regions(str(bed)), _expect([("chr1", 0, 5)])
+        )
 
-    def test_multiple_chromosomes(self, tmp_path):
+    def test_track_and_browser_lines_skipped(self, tmp_path):
         bed = tmp_path / "r.bed"
-        bed.write_text("chr1\t0\t5\nchr2\t10\t20\n")
+        bed.write_text(
+            'browser position chr1:1-1000\n'
+            'track name="x" description="y"\n'
+            "chr1\t0\t5\n"
+        )
+        pd.testing.assert_frame_equal(
+            _load_regions(str(bed)), _expect([("chr1", 0, 5)])
+        )
+
+    def test_extra_columns_ignored(self, tmp_path):
+        # A 6-column BED line (chrom, start, end, name, score, strand) loads.
+        bed = tmp_path / "r.bed"
+        bed.write_text("chr1\t10\t20\tregion_a\t900\t+\n")
+        pd.testing.assert_frame_equal(
+            _load_regions(str(bed)), _expect([("chr1", 10, 20)])
+        )
+
+    def test_multiple_chromosomes_sorted(self, tmp_path):
+        bed = tmp_path / "r.bed"
+        bed.write_text("chr2\t10\t20\nchr1\t0\t5\n")
         result = _load_regions(str(bed))
-        assert set(result.keys()) == {"chr1", "chr2"}
+        assert set(result["chrom"]) == {"chr1", "chr2"}
+        # Rows should be sorted by chromosome then start.
+        assert list(result["chrom"]) == ["chr1", "chr2"]
+
+    def test_empty_file_returns_empty_dataframe(self, tmp_path):
+        bed = tmp_path / "r.bed"
+        bed.write_text("# only headers\n\n")
+        result = _load_regions(str(bed))
+        assert list(result.columns) == ["chrom", "start", "end"]
+        assert len(result) == 0
+
+    def test_invalid_interval_start_gt_end_raises(self, tmp_path):
+        bed = tmp_path / "r.bed"
+        bed.write_text("chr1\t10\t5\n")
+        with pytest.raises(ValueError, match="start > end"):
+            _load_regions(str(bed))
 
 
 # ---------------------------------------------------------------------------
