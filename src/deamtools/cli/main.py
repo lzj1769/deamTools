@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import logging
 
 from deamtools.utils import get_version
-
 from deamtools.preprocessing.bam2bw import run_bam2bw
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -19,6 +20,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--version",
         action="version",
         version=f"%(prog)s {get_version()}",
+    )
+    parser.add_argument(
+        "--log_level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        metavar="LEVEL",
+        help="Logging verbosity (DEBUG/INFO/WARNING/ERROR). Default: INFO.",
     )
 
     subparsers = parser.add_subparsers(
@@ -70,52 +78,45 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
+    # Required inputs
     parser.add_argument(
         "--bam",
         required=True,
         metavar="FILE",
-        help=(
-            "Path to the input BAM file. Must be coordinate-sorted and "
-            "accompanied by an index file (.bai)."
-        ),
+        help="Path to the coordinate-sorted, indexed BAM file (.bai required).",
     )
     parser.add_argument(
         "--fasta",
         required=True,
         metavar="FILE",
-        help=(
-            "Path to the reference genome FASTA file used during alignment. "
-            "Must be indexed with 'samtools faidx' (.fai)."
-        ),
+        help="Path to the reference FASTA file indexed with 'samtools faidx' (.fai required).",
     )
     parser.add_argument(
         "--output",
         required=True,
         metavar="FILE",
-        help=(
-            "Path for the output BigWig file (.bw). "
-            "Parent directories will be created if they do not exist."
-        ),
+        help="Output BigWig file path (.bw). Parent directories are created automatically.",
     )
+
+    # Optional inputs
     parser.add_argument(
         "--chrom_sizes",
-        required=True,
         metavar="FILE",
         help=(
-            "Path to a chromosome sizes file (tab-delimited: chrom\\tsize). "
-            "Chromosome sizes are required for BigWig creation."
+            "Tab-delimited chromosome sizes file (chrom\\tsize). "
+            "If omitted, sizes are inferred from the BAM header."
         ),
     )
     parser.add_argument(
         "--regions",
         metavar="FILE",
         help=(
-            "Path to a BED file defining genomic regions of interest. "
-            "When provided, only reads overlapping these regions are processed, "
-            "which can substantially reduce runtime for targeted analyses. "
-            "If omitted, the entire genome is analysed."
+            "BED file of genomic regions to restrict analysis to. "
+            "When omitted, the entire genome is processed."
         ),
     )
+
+    # Signal options
     parser.add_argument(
         "--extend_size",
         type=int,
@@ -123,11 +124,35 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="INT",
         help=(
             "Symmetrically extend each detected editing site by INT base pairs "
-            "in both directions before writing to the BigWig. "
-            "Useful for smoothing sparse signals or calling accessible windows "
-            "around editing events. Default: %(default)s (no extension)."
+            "before writing to BigWig. Default: %(default)s (no extension)."
         ),
     )
+
+    # Quality filters
+    parser.add_argument(
+        "--min_mapq",
+        type=int,
+        default=20,
+        metavar="INT",
+        help="Minimum read mapping quality to include. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--min_baseq",
+        type=int,
+        default=20,
+        metavar="INT",
+        help="Minimum base quality at a position to count an editing event. Default: %(default)s.",
+    )
+
+    # Performance
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        metavar="INT",
+        help="Number of threads for parallel chromosome processing. Default: %(default)s.",
+    )
+
     parser.set_defaults(func=_run_bam2bw)
 
 
@@ -135,12 +160,13 @@ def _run_bam2bw(args: argparse.Namespace) -> int:
     run_bam2bw(
         bam_path=args.bam,
         fasta_path=args.fasta,
-        bed_path=args.regions,
         output_path=args.output,
+        chrom_sizes_path=args.chrom_sizes,
+        bed_path=args.regions,
         min_mapq=args.min_mapq,
         min_baseq=args.min_baseq,
+        extend_size=args.extend_size,
         threads=args.threads,
-        log_level=args.log_level,
     )
     return 0
 
@@ -148,6 +174,12 @@ def _run_bam2bw(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)-8s %(message)s",
+        level=getattr(logging, args.log_level),
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     if not hasattr(args, "func"):
         parser.print_help()

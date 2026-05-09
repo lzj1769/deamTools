@@ -41,6 +41,7 @@ dependencies = [
   "matplotlib>=3.8",
   "pysam>=0.22",
   "pyBigWig>=0.3.22",
+  "MOODS-python==1.9.4.1",
 ]
 
 [project.optional-dependencies]

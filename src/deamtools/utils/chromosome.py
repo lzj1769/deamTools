@@ -16,10 +16,8 @@ def get_chrom_sizes_from_bam(bam: pysam.Samfile) -> dict[str, int]:
         A dictionary mapping chromosome names to their sizes (length - 1).
     """
     chromosome = list(bam.references)
-    end = list(bam.lengths)
-    end = [x - 1 for x in end]
-
-    chrom_sizes = {chromosome[i]: end[i] for i in range(len(chromosome))}
+    lengths = list(bam.lengths)
+    chrom_sizes = dict(zip(chromosome, lengths))
     return chrom_sizes
 
 
