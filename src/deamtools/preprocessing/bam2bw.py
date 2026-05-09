@@ -44,8 +44,26 @@ def _count_deamination_on_chrom(
     min_mapq: int,
     min_baseq: int,
     extend_size: int,
+    mode: str = "count",
 ) -> tuple[str, np.ndarray]:
-    counts = np.zeros(chrom_size, dtype=np.float32)
+    """Per-chromosome deamination counter.
+
+    For ``mode="count"`` (default), returns the number of C->T (forward) /
+    G->A (reverse) editing events at each reference base.
+
+    For ``mode="ratio"``, returns the per-base conversion ratio
+    ``events / informative_coverage``, where informative coverage is the number
+    of reads that contributed a usable C/T base at a reference C (forward
+    reads) or a G/A base at a reference G (reverse reads). Bases that are
+    neither C nor T (or G nor A on the reverse strand) — sequencing errors,
+    SNPs, indels — are excluded from the denominator. Positions with no
+    informative coverage produce a ratio of 0.
+    """
+    if mode not in ("count", "ratio"):
+        raise ValueError(f"mode must be 'count' or 'ratio', got {mode!r}")
+
+    events = np.zeros(chrom_size, dtype=np.float32)
+    coverage = np.zeros(chrom_size, dtype=np.float32) if mode == "ratio" else None
 
     with (
         pysam.AlignmentFile(bam_path, "rb") as bam,
@@ -85,20 +103,33 @@ def _count_deamination_on_chrom(
                     ref_base = ref_seq[ref_pos - region_start]
                     read_base = seq[query_pos]
 
-                    # Forward strand: C→T deamination
-                    # Reverse strand: G→A (deamination of C on the template strand)
+                    # Forward strand: C->T deamination at reference C.
+                    # Reverse strand: G->A (deamination of C on the template strand).
                     if is_reverse:
-                        if ref_base == "G" and read_base == "A":
-                            counts[ref_pos] += 1
+                        if ref_base == "G":
+                            if read_base == "A":
+                                events[ref_pos] += 1
+                            if coverage is not None and read_base in ("G", "A"):
+                                coverage[ref_pos] += 1
                     else:
-                        if ref_base == "C" and read_base == "T":
-                            counts[ref_pos] += 1
+                        if ref_base == "C":
+                            if read_base == "T":
+                                events[ref_pos] += 1
+                            if coverage is not None and read_base in ("C", "T"):
+                                coverage[ref_pos] += 1
 
     if extend_size > 0:
         kernel = np.ones(2 * extend_size + 1, dtype=np.float32)
-        counts = np.convolve(counts, kernel, mode="same")
+        events = np.convolve(events, kernel, mode="same")
+        if coverage is not None:
+            coverage = np.convolve(coverage, kernel, mode="same")
 
-    return chrom, counts
+    if mode == "ratio":
+        out = np.zeros_like(events)
+        np.divide(events, coverage, out=out, where=coverage > 0)
+        return chrom, out
+
+    return chrom, events
 
 
 def run_bam2bw(
@@ -111,8 +142,12 @@ def run_bam2bw(
     min_baseq: int = 20,
     extend_size: int = 0,
     threads: int = 1,
+    mode: str = "count",
 ) -> None:
-    logger.info("Running bam2bw")
+    if mode not in ("count", "ratio"):
+        raise ValueError(f"mode must be 'count' or 'ratio', got {mode!r}")
+
+    logger.info(f"Running bam2bw (mode={mode})")
     logger.info(f"BAM:   {bam_path}")
     logger.info(f"FASTA: {fasta_path}")
 
@@ -149,27 +184,32 @@ def run_bam2bw(
             min_mapq=min_mapq,
             min_baseq=min_baseq,
             extend_size=extend_size,
+            mode=mode,
         )
 
     with ThreadPoolExecutor(max_workers=threads) as pool:
         futures = {pool.submit(_process, chrom): chrom for chrom in chroms_to_process}
         for future in as_completed(futures):
-            chrom, counts = future.result()
-            logger.info(f"  {chrom}: {int(counts.sum())} deamination event(s)")
-            results[chrom] = counts
+            chrom, signal = future.result()
+            if mode == "count":
+                logger.info(f"  {chrom}: {int(signal.sum())} deamination event(s)")
+            else:
+                nonzero = int(np.count_nonzero(signal))
+                logger.info(f"  {chrom}: {nonzero} position(s) with non-zero ratio")
+            results[chrom] = signal
 
     logger.info(f"Writing {output_path}")
     with pyBigWig.open(output_path, "w") as bw:
         bw.addHeader(list(chrom_sizes.items()))
         for chrom in chroms_to_process:
-            counts = results[chrom]
-            nonzero = np.nonzero(counts)[0]
+            signal = results[chrom]
+            nonzero = np.nonzero(signal)[0]
             if len(nonzero) == 0:
                 continue
             bw.addEntries(
                 chrom,
                 nonzero.tolist(),
-                values=counts[nonzero].tolist(),
+                values=signal[nonzero].tolist(),
                 span=1,
             )
 

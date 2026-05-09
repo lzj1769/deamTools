@@ -320,3 +320,117 @@ class TestRunBam2bw:
         assert os.path.exists(out)
         with pyBigWig.open(out) as bw:
             assert bw.stats("chr1", 0, len(REF_SEQ), type="mean")[0] is None
+
+
+# ---------------------------------------------------------------------------
+# Ratio mode
+# ---------------------------------------------------------------------------
+
+
+class TestRatioMode:
+    """Tests for the --mode ratio output: events / informative coverage."""
+
+    def _run(self, bam_path, fasta_file, *, mode, extend_size=0):
+        _, signal = _count_deamination_on_chrom(
+            bam_path=bam_path,
+            fasta_path=fasta_file,
+            chrom="chr1",
+            chrom_size=len(REF_SEQ),
+            regions=None,
+            min_mapq=0,
+            min_baseq=0,
+            extend_size=extend_size,
+            mode=mode,
+        )
+        return signal
+
+    def test_invalid_mode_raises(self, tmp_path, fasta_file):
+        bam = _write_bam(str(tmp_path / "t.bam"),
+                         [_make_read("r1", REF_SEQ, 0, 0)])
+        with pytest.raises(ValueError):
+            _count_deamination_on_chrom(
+                bam_path=bam, fasta_path=fasta_file, chrom="chr1",
+                chrom_size=len(REF_SEQ), regions=None,
+                min_mapq=0, min_baseq=0, extend_size=0, mode="bogus",
+            )
+
+    def test_ratio_three_quarters_at_C(self, tmp_path, fasta_file):
+        # Reference C at pos 1: 3 reads with T (events), 1 read with C (no event).
+        # Expected ratio at pos 1 = 3 / (3 + 1) = 0.75.
+        reads = [
+            _make_read("r1", "ATGTCGATCG", 0, 0),  # T at pos 1 -> event
+            _make_read("r2", "ATGTCGATCG", 0, 0),  # T at pos 1 -> event
+            _make_read("r3", "ATGTCGATCG", 0, 0),  # T at pos 1 -> event
+            _make_read("r4", REF_SEQ,      0, 0),  # C at pos 1 -> coverage only
+        ]
+        bam = _write_bam(str(tmp_path / "t.bam"), reads)
+        ratio = self._run(bam, fasta_file, mode="ratio")
+        assert ratio[1] == pytest.approx(0.75)
+        # No events at any other C/G position -> ratio 0 (or coverage 0).
+        # Position 4 (ref C) is covered by all 4 reads with C -> 0/4 = 0.
+        assert ratio[4] == 0.0
+
+    def test_ratio_uninformative_base_excluded_from_denominator(self, tmp_path, fasta_file):
+        # At ref C (pos 1): 1 read T (event), 1 read A (uninformative).
+        # Denominator only counts C/T reads -> 1 / (1 + 0) = 1.0, not 0.5.
+        reads = [
+            _make_read("r1", "ATGTCGATCG", 0, 0),  # T at pos 1
+            _make_read("r2", "AAGTCGATCG", 0, 0),  # A at pos 1 (uninformative)
+        ]
+        bam = _write_bam(str(tmp_path / "t.bam"), reads)
+        ratio = self._run(bam, fasta_file, mode="ratio")
+        assert ratio[1] == pytest.approx(1.0)
+
+    def test_ratio_zero_when_no_coverage(self, tmp_path, fasta_file):
+        # Read identical to reference -> events 0 everywhere; positions with
+        # coverage have ratio 0; uncovered positions also 0.
+        bam = _write_bam(str(tmp_path / "t.bam"),
+                         [_make_read("r1", REF_SEQ, 0, 0)])
+        ratio = self._run(bam, fasta_file, mode="ratio")
+        assert (ratio == 0.0).all()
+
+    def test_ratio_reverse_strand(self, tmp_path, fasta_file):
+        # Reverse-strand reads at ref G (pos 2). Read with A at pos 2 -> event.
+        # Expected ratio: 2 events / 3 informative reads.
+        seq = "ACATCGATCG"  # A at pos 2 (deam event under reverse strand)
+        reads = [
+            _make_read("r1", seq,     0, 0, is_reverse=True),  # A
+            _make_read("r2", seq,     0, 0, is_reverse=True),  # A
+            _make_read("r3", REF_SEQ, 0, 0, is_reverse=True),  # G (coverage only)
+        ]
+        bam = _write_bam(str(tmp_path / "t.bam"), reads)
+        ratio = self._run(bam, fasta_file, mode="ratio")
+        assert ratio[2] == pytest.approx(2.0 / 3.0)
+
+    def test_ratio_with_extend_size_uses_window_sums(self, tmp_path, fasta_file):
+        # Two reads: one event at pos 1 (T at C), one read with C at pos 1.
+        # extend_size=1 -> events convolved over [0,1,2], coverage convolved
+        # over [0,1,2]. At pos 0,1,2: ratio = (sum events in window) / (sum cov in window).
+        # events: [0, 1, 0, ...]; coverage at C-positions only:
+        #   pos 1: 2 (one T, one C); other positions: 0
+        # After convolve with window=3:
+        #   events: [1, 1, 1, 0, ...]
+        #   coverage: [2, 2, 2, 0, ...]
+        #   ratio at 0,1,2: 0.5 each.
+        reads = [
+            _make_read("r1", "ATGTCGATCG", 0, 0),  # T at C (event)
+            _make_read("r2", REF_SEQ,      0, 0),  # C at C (coverage only)
+        ]
+        bam = _write_bam(str(tmp_path / "t.bam"), reads)
+        ratio = self._run(bam, fasta_file, mode="ratio", extend_size=1)
+        for i in (0, 1, 2):
+            assert ratio[i] == pytest.approx(0.5)
+
+    def test_ratio_bigwig_round_trip(self, tmp_path, fasta_file, chrom_sizes_file):
+        reads = [
+            _make_read("r1", "ATGTCGATCG", 0, 0),  # T at C (event)
+            _make_read("r2", "ATGTCGATCG", 0, 0),  # T at C (event)
+            _make_read("r3", REF_SEQ,      0, 0),  # C at C (coverage only)
+        ]
+        bam = _write_bam(str(tmp_path / "t.bam"), reads)
+        out = str(tmp_path / "ratio.bw")
+        run_bam2bw(bam_path=bam, fasta_path=fasta_file, output_path=out,
+                   chrom_sizes_path=chrom_sizes_file,
+                   min_mapq=0, min_baseq=0, mode="ratio")
+        with pyBigWig.open(out) as bw:
+            assert bw.stats("chr1", 1, 2, type="mean")[0] == pytest.approx(2.0 / 3.0)

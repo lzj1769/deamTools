@@ -237,6 +237,20 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
 
     # Signal options
     parser.add_argument(
+        "--mode",
+        default="count",
+        choices=["count", "ratio"],
+        metavar="MODE",
+        help=(
+            "Signal to write to BigWig. 'count' (default) writes the raw number "
+            "of C->T deamination events at each base. 'ratio' writes the per-base "
+            "conversion ratio events / informative_coverage, where informative "
+            "coverage counts reads contributing C or T at a reference C (forward "
+            "reads) or G or A at a reference G (reverse reads). With --extend_size, "
+            "ratios are computed from window-summed events and coverage."
+        ),
+    )
+    parser.add_argument(
         "--extend_size",
         type=int,
         default=0,
@@ -303,6 +317,7 @@ def _run_bam2bw(args: argparse.Namespace) -> int:
         min_baseq=args.min_baseq,
         extend_size=args.extend_size,
         threads=args.threads,
+        mode=args.mode,
     )
     return 0
 
