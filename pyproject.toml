@@ -61,9 +61,10 @@ docs = [
 deamtools = "deamtools.cli.main:main"
 
 [project.urls]
-Homepage = "https://github.com/your-username/DeamTools"
-Repository = "https://github.com/your-username/DeamTools"
-Issues = "https://github.com/your-username/DeamTools/issues"
+Homepage = "https://github.com/lzj1769/deamTools"
+Repository = "https://github.com/lzj1769/deamTools"
+Issues = "https://github.com/lzj1769/deamTools/issues"
+Documentation = "https://lzj1769.github.io/deamTools"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/deamtools"]
