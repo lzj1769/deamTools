@@ -8,8 +8,8 @@ import pysam
 import pytest
 
 from deamtools.preprocessing.bam2bw import (
-    _count_deamination_on_chrom,
     _load_regions,
+    _signal_for_region,
     run_bam2bw,
 )
 
@@ -179,21 +179,43 @@ class TestLoadRegions:
 # ---------------------------------------------------------------------------
 
 
-class TestCountDeamination:
-    """Unit tests for the per-chromosome counting kernel."""
+def _run_count_region(bam_path, fasta_file, regions, *, min_mapq, min_baseq, extend_size):
+    """Stitch per-region count signal into a full-chromosome array.
 
-    def _run(self, bam_path, fasta_file, *, regions=None, min_mapq=0, min_baseq=0, extend_size=0):
-        _, counts = _count_deamination_on_chrom(
+    Lets the legacy tests in :class:`TestCountDeamination` keep asserting on
+    absolute reference positions even though :func:`_signal_for_region`
+    returns a per-region array.
+    """
+    if regions is None:
+        regions = [(0, len(REF_SEQ))]
+    out = [0.0] * len(REF_SEQ)
+    for start, end in regions:
+        _, _, _, sig = _signal_for_region(
             bam_path=bam_path,
             fasta_path=fasta_file,
             chrom="chr1",
-            chrom_size=len(REF_SEQ),
-            regions=regions,
+            start=start,
+            end=end,
+            mode="count",
             min_mapq=min_mapq,
             min_baseq=min_baseq,
             extend_size=extend_size,
+            min_coverage=0,
         )
-        return counts
+        for i, v in enumerate(sig):
+            out[start + i] = float(v)
+    import numpy as _np
+    return _np.array(out, dtype=_np.float32)
+
+
+class TestCountDeamination:
+    """Unit tests for the per-region count signal."""
+
+    def _run(self, bam_path, fasta_file, *, regions=None, min_mapq=0, min_baseq=0, extend_size=0):
+        return _run_count_region(
+            bam_path, fasta_file, regions,
+            min_mapq=min_mapq, min_baseq=min_baseq, extend_size=extend_size,
+        )
 
     # -- Deamination detection ------------------------------------------------
 
@@ -385,98 +407,108 @@ class TestRunBam2bw:
 
 
 class TestRatioMode:
-    """Tests for the --mode ratio output: events / informative coverage."""
+    """Tests for --mode ratio: edit_count / total ACGT coverage.
 
-    def _run(self, bam_path, fasta_file, *, mode, extend_size=0):
-        _, signal = _count_deamination_on_chrom(
+    Mirrors the ACCESS-ATAC reference algorithm: the denominator is the
+    sum of ACGT read counts at each position (not only "informative"
+    bases), and positions below ``--min_coverage`` are masked to 0.
+    """
+
+    def _run(self, bam_path, fasta_file, *, extend_size=0, min_coverage=0):
+        _, _, _, signal = _signal_for_region(
             bam_path=bam_path,
             fasta_path=fasta_file,
             chrom="chr1",
-            chrom_size=len(REF_SEQ),
-            regions=None,
+            start=0,
+            end=len(REF_SEQ),
+            mode="ratio",
             min_mapq=0,
             min_baseq=0,
             extend_size=extend_size,
-            mode=mode,
+            min_coverage=min_coverage,
         )
         return signal
 
     def test_invalid_mode_raises(self, tmp_path, fasta_file):
         bam = _write_bam(str(tmp_path / "t.bam"),
                          [_make_read("r1", REF_SEQ, 0, 0)])
-        with pytest.raises(ValueError):
-            _count_deamination_on_chrom(
-                bam_path=bam, fasta_path=fasta_file, chrom="chr1",
-                chrom_size=len(REF_SEQ), regions=None,
-                min_mapq=0, min_baseq=0, extend_size=0, mode="bogus",
+        out = str(tmp_path / "out.bw")
+        with pytest.raises(ValueError, match="mode"):
+            run_bam2bw(
+                bam_path=bam, fasta_path=fasta_file, output_path=out,
+                min_mapq=0, min_baseq=0, mode="bogus",
             )
 
     def test_ratio_three_quarters_at_C(self, tmp_path, fasta_file):
-        # Reference C at pos 1: 3 reads with T (events), 1 read with C (no event).
-        # Expected ratio at pos 1 = 3 / (3 + 1) = 0.75.
+        # Reference C at pos 1: 3 reads with T (events), 1 read with C.
+        # Total ACGT coverage at pos 1 = 4. Ratio = 3 / 4 = 0.75.
         reads = [
-            _make_read("r1", "ATGTCGATCG", 0, 0),  # T at pos 1 -> event
-            _make_read("r2", "ATGTCGATCG", 0, 0),  # T at pos 1 -> event
-            _make_read("r3", "ATGTCGATCG", 0, 0),  # T at pos 1 -> event
-            _make_read("r4", REF_SEQ,      0, 0),  # C at pos 1 -> coverage only
+            _make_read("r1", "ATGTCGATCG", 0, 0),
+            _make_read("r2", "ATGTCGATCG", 0, 0),
+            _make_read("r3", "ATGTCGATCG", 0, 0),
+            _make_read("r4", REF_SEQ,      0, 0),
         ]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
-        ratio = self._run(bam, fasta_file, mode="ratio")
+        ratio = self._run(bam, fasta_file)
         assert ratio[1] == pytest.approx(0.75)
-        # No events at any other C/G position -> ratio 0 (or coverage 0).
-        # Position 4 (ref C) is covered by all 4 reads with C -> 0/4 = 0.
+        # Position 4 (ref C, no edits, but 4 reads of coverage): 0/4 = 0.
         assert ratio[4] == 0.0
 
-    def test_ratio_uninformative_base_excluded_from_denominator(self, tmp_path, fasta_file):
-        # At ref C (pos 1): 1 read T (event), 1 read A (uninformative).
-        # Denominator only counts C/T reads -> 1 / (1 + 0) = 1.0, not 0.5.
+    def test_ratio_uses_total_coverage_denominator(self, tmp_path, fasta_file):
+        # At ref C (pos 1): 1 read T (event), 1 read A (sequencing error/SNP).
+        # Total ACGT coverage = 2 -> ratio = 1/2 = 0.5 under the reference
+        # algorithm (not 1.0 as under an informative-only denominator).
         reads = [
-            _make_read("r1", "ATGTCGATCG", 0, 0),  # T at pos 1
-            _make_read("r2", "AAGTCGATCG", 0, 0),  # A at pos 1 (uninformative)
+            _make_read("r1", "ATGTCGATCG", 0, 0),  # T at C -> event
+            _make_read("r2", "AAGTCGATCG", 0, 0),  # A at C -> coverage only
         ]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
-        ratio = self._run(bam, fasta_file, mode="ratio")
-        assert ratio[1] == pytest.approx(1.0)
+        ratio = self._run(bam, fasta_file)
+        assert ratio[1] == pytest.approx(0.5)
 
-    def test_ratio_zero_when_no_coverage(self, tmp_path, fasta_file):
-        # Read identical to reference -> events 0 everywhere; positions with
-        # coverage have ratio 0; uncovered positions also 0.
+    def test_ratio_zero_when_no_edits(self, tmp_path, fasta_file):
         bam = _write_bam(str(tmp_path / "t.bam"),
                          [_make_read("r1", REF_SEQ, 0, 0)])
-        ratio = self._run(bam, fasta_file, mode="ratio")
+        ratio = self._run(bam, fasta_file)
         assert (ratio == 0.0).all()
 
-    def test_ratio_reverse_strand(self, tmp_path, fasta_file):
-        # Reverse-strand reads at ref G (pos 2). Read with A at pos 2 -> event.
-        # Expected ratio: 2 events / 3 informative reads.
-        seq = "ACATCGATCG"  # A at pos 2 (deam event under reverse strand)
+    def test_ratio_reverse_strand_strand_agnostic(self, tmp_path, fasta_file):
+        # Reverse-strand reads at ref G (pos 2). Two reads with A at ref pos 2
+        # contribute events; one with G contributes coverage only.
+        # Total coverage at pos 2 = 3, events = 2, ratio = 2/3.
+        seq = "ACATCGATCG"  # A at pos 2 (G->A reference mismatch)
         reads = [
-            _make_read("r1", seq,     0, 0, is_reverse=True),  # A
-            _make_read("r2", seq,     0, 0, is_reverse=True),  # A
-            _make_read("r3", REF_SEQ, 0, 0, is_reverse=True),  # G (coverage only)
+            _make_read("r1", seq,     0, 0, is_reverse=True),
+            _make_read("r2", seq,     0, 0, is_reverse=True),
+            _make_read("r3", REF_SEQ, 0, 0, is_reverse=True),
         ]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
-        ratio = self._run(bam, fasta_file, mode="ratio")
+        ratio = self._run(bam, fasta_file)
         assert ratio[2] == pytest.approx(2.0 / 3.0)
 
-    def test_ratio_with_extend_size_uses_window_sums(self, tmp_path, fasta_file):
-        # Two reads: one event at pos 1 (T at C), one read with C at pos 1.
-        # extend_size=1 -> events convolved over [0,1,2], coverage convolved
-        # over [0,1,2]. At pos 0,1,2: ratio = (sum events in window) / (sum cov in window).
-        # events: [0, 1, 0, ...]; coverage at C-positions only:
-        #   pos 1: 2 (one T, one C); other positions: 0
-        # After convolve with window=3:
-        #   events: [1, 1, 1, 0, ...]
-        #   coverage: [2, 2, 2, 0, ...]
-        #   ratio at 0,1,2: 0.5 each.
-        reads = [
-            _make_read("r1", "ATGTCGATCG", 0, 0),  # T at C (event)
-            _make_read("r2", REF_SEQ,      0, 0),  # C at C (coverage only)
-        ]
+    def test_ratio_extend_size_ignored(self, tmp_path, fasta_file):
+        # Per the reference algorithm, --extend_size only applies to count
+        # mode. With a single C->T at pos 1 and extend_size=2, the ratio
+        # mode signal must still be non-zero only at pos 1 (the editing site).
+        bam = _write_bam(str(tmp_path / "t.bam"),
+                         [_make_read("r1", "ATGTCGATCG", 0, 0)])
+        ratio = self._run(bam, fasta_file, extend_size=2)
+        assert ratio[1] == pytest.approx(1.0)
+        # Neighbouring bases stay at zero -- no convolution / extension.
+        assert ratio[0] == 0.0
+        assert ratio[2] == 0.0
+        assert ratio[3] == 0.0
+
+    def test_min_coverage_threshold_masks_low_coverage_positions(self, tmp_path, fasta_file):
+        # 3 reads, all with C->T at pos 1. Total coverage = 3.
+        reads = [_make_read(f"r{i}", "ATGTCGATCG", 0, 0) for i in range(3)]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
-        ratio = self._run(bam, fasta_file, mode="ratio", extend_size=1)
-        for i in (0, 1, 2):
-            assert ratio[i] == pytest.approx(0.5)
+        # Coverage threshold above actual coverage -> ratio masked to 0.
+        ratio_masked = self._run(bam, fasta_file, min_coverage=10)
+        assert ratio_masked[1] == 0.0
+        # Coverage threshold at or below actual coverage -> ratio reported.
+        ratio_kept = self._run(bam, fasta_file, min_coverage=3)
+        assert ratio_kept[1] == pytest.approx(1.0)
 
     def test_ratio_bigwig_round_trip(self, tmp_path, fasta_file, chrom_sizes_file):
         reads = [
@@ -488,6 +520,6 @@ class TestRatioMode:
         out = str(tmp_path / "ratio.bw")
         run_bam2bw(bam_path=bam, fasta_path=fasta_file, output_path=out,
                    chrom_sizes_path=chrom_sizes_file,
-                   min_mapq=0, min_baseq=0, mode="ratio")
+                   min_mapq=0, min_baseq=0, mode="ratio", min_coverage=0)
         with pyBigWig.open(out) as bw:
             assert bw.stats("chr1", 1, 2, type="mean")[0] == pytest.approx(2.0 / 3.0)

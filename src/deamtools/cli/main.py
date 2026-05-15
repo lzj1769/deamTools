@@ -183,7 +183,7 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         "bam2bw",
         help=(
             "Convert a coordinate-sorted BAM file to a BigWig track of "
-            "per-base C-to-T deamination counts."
+            "per-base C-to-T deamination counts or ratios."
         ),
         description=(
             "Convert aligned reads in BAM format to BigWig format by quantifying\n"
@@ -262,11 +262,10 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="MODE",
         help=(
             "Signal to write to BigWig. 'count' (default) writes the raw number "
-            "of C->T deamination events at each base. 'ratio' writes the per-base "
-            "conversion ratio events / informative_coverage, where informative "
-            "coverage counts reads contributing C or T at a reference C (forward "
-            "reads) or G or A at a reference G (reverse reads). With --extend_size, "
-            "ratios are computed from window-summed events and coverage."
+            "of deamination events at each base (any C->T or G->A reference "
+            "mismatch). 'ratio' writes edit_count / total_coverage at each base, "
+            "where total_coverage is the sum of ACGT read coverage and positions "
+            "below --min_coverage are reported as 0."
         ),
     )
     parser.add_argument(
@@ -276,7 +275,19 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="INT",
         help=(
             "Symmetrically extend each detected editing site by INT base pairs "
-            "before writing to BigWig. Default: %(default)s (no extension)."
+            "before writing to BigWig. Only applied in --mode count; ignored in "
+            "--mode ratio. Default: %(default)s (no extension)."
+        ),
+    )
+    parser.add_argument(
+        "--min_coverage",
+        type=int,
+        default=10,
+        metavar="INT",
+        help=(
+            "Minimum total ACGT coverage required to report a non-zero ratio in "
+            "--mode ratio. Positions below this threshold are written as 0. "
+            "Ignored in --mode count. Default: %(default)s."
         ),
     )
 
@@ -302,7 +313,7 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         default=1,
         metavar="INT",
-        help="Number of threads for parallel chromosome processing. Default: %(default)s.",
+        help="Number of threads for parallel region processing. Default: %(default)s.",
     )
 
     parser.set_defaults(func=_run_bam2bw)
@@ -443,6 +454,7 @@ def _run_bam2bw(args: argparse.Namespace) -> int:
         extend_size=args.extend_size,
         threads=args.threads,
         mode=args.mode,
+        min_coverage=args.min_coverage,
     )
     return 0
 
