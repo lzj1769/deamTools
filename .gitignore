@@ -13,3 +13,6 @@ build/
 *.bw
 *.fa
 *.fai
+
+# /export-generated transcripts (claude-code local command output)
+*-local-command-caveat*.txt

@@ -2,11 +2,29 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shlex
+import sys
 
 from deamtools.align.align import run_align
 from deamtools.align.index import run_index
 from deamtools.preprocessing.bam2bw import run_bam2bw
+from deamtools.preprocessing.bam2fragment import run_bam2fragment
 from deamtools.utils import get_version
+
+logger = logging.getLogger(__name__)
+
+# Argparse-internal attributes we don't want to print as user parameters.
+_INTERNAL_ARG_KEYS = frozenset({"func", "command"})
+
+
+def _log_invocation(args: argparse.Namespace) -> None:
+    """Echo the invocation and resolved argument values, MACS2-style."""
+    logger.info("# Command line: %s", " ".join(shlex.quote(a) for a in sys.argv))
+    logger.info("# ARGUMENTS LIST:")
+    for key, value in vars(args).items():
+        if key in _INTERNAL_ARG_KEYS:
+            continue
+        logger.info("# %s = %s", key, value)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_index_parser(subparsers)
     _add_align_parser(subparsers)
     _add_bam2bw_parser(subparsers)
+    _add_bam2fragment_parser(subparsers)
 
     return parser
 
@@ -289,12 +308,117 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_run_bam2bw)
 
 
+def _add_bam2fragment_parser(subparsers: argparse._SubParsersAction) -> None:
+    parser = subparsers.add_parser(
+        "bam2fragment",
+        help=(
+            "Convert a coordinate-sorted BAM file to a per-fragment editing-signal "
+            "table."
+        ),
+        description=(
+            "Convert aligned reads in BAM format to a tab-delimited fragment table.\n"
+            "\n"
+            "Each row reports a unique fragment defined by (chrom, start, end,\n"
+            "editing positions [, barcode]). The 'count' column gives the number\n"
+            "of reads/pairs producing that exact signature; the 'edits' column is\n"
+            "a '|'-separated list of 0-based reference positions where a C->T\n"
+            "(forward read) or G->A (reverse read) deamination event was observed.\n"
+            "\n"
+            "Fragments are formed by pairing properly-paired reads (start = min of\n"
+            "the two read starts, end = max of the two read ends); for unpaired\n"
+            "BAMs each read is treated as a single-end fragment."
+        ),
+        epilog=(
+            "examples:\n"
+            "  # Bulk fragment table (no barcode)\n"
+            "  deamtools bam2fragment --bam sample.bam --fasta hg38.fa \\\n"
+            "      --output sample.fragments.tsv\n"
+            "\n"
+            "  # Single-cell fragment table with 10x-style barcode tag\n"
+            "  deamtools bam2fragment --bam sample.bam --fasta hg38.fa \\\n"
+            "      --barcode --barcode_tag CB --output sample.fragments.tsv.gz\n"
+            "\n"
+            "notes:\n"
+            "  * The BAM must be coordinate-sorted and indexed (.bai).\n"
+            "  * The FASTA must be indexed with 'samtools faidx' (.fai).\n"
+            "  * Output paths ending in .gz are written gzip-compressed."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    parser.add_argument(
+        "--bam",
+        required=True,
+        metavar="FILE",
+        help="Coordinate-sorted, indexed BAM file (.bai required).",
+    )
+    parser.add_argument(
+        "--fasta",
+        required=True,
+        metavar="FILE",
+        help="Reference FASTA file indexed with 'samtools faidx' (.fai required).",
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        metavar="FILE",
+        help=(
+            "Output fragment file path. If the path ends with '.gz', the file is "
+            "written gzip-compressed."
+        ),
+    )
+
+    parser.add_argument(
+        "--min_mapq",
+        type=int,
+        default=20,
+        metavar="INT",
+        help="Minimum read mapping quality. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--min_baseq",
+        type=int,
+        default=20,
+        metavar="INT",
+        help="Minimum base quality at a position to count an editing event. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        metavar="INT",
+        help="Number of threads for parallel chromosome processing. Default: %(default)s.",
+    )
+
+    parser.add_argument(
+        "--barcode",
+        action="store_true",
+        help=(
+            "Include a barcode column in the output. With this flag the output "
+            "format becomes 'chrom\\tstart\\tend\\tbarcode\\tcount\\tedits' "
+            "(10x fragments-style). Fragments without the barcode tag are written "
+            "with '.' as the barcode."
+        ),
+    )
+    parser.add_argument(
+        "--barcode_tag",
+        default="CB",
+        metavar="TAG",
+        help="BAM tag carrying the cell barcode. Default: %(default)s (10x convention).",
+    )
+
+    parser.set_defaults(func=_run_bam2fragment)
+
+
+
 def _run_index(args: argparse.Namespace) -> int:
+    _log_invocation(args)
     run_index(fasta_path=args.fasta, force=args.force)
     return 0
 
 
 def _run_align(args: argparse.Namespace) -> int:
+    _log_invocation(args)
     run_align(
         fasta_path=args.fasta,
         fastq1=args.fastq1,
@@ -307,6 +431,7 @@ def _run_align(args: argparse.Namespace) -> int:
 
 
 def _run_bam2bw(args: argparse.Namespace) -> int:
+    _log_invocation(args)
     run_bam2bw(
         bam_path=args.bam,
         fasta_path=args.fasta,
@@ -318,6 +443,21 @@ def _run_bam2bw(args: argparse.Namespace) -> int:
         extend_size=args.extend_size,
         threads=args.threads,
         mode=args.mode,
+    )
+    return 0
+
+
+def _run_bam2fragment(args: argparse.Namespace) -> int:
+    _log_invocation(args)
+    run_bam2fragment(
+        bam_path=args.bam,
+        fasta_path=args.fasta,
+        output_path=args.output,
+        min_mapq=args.min_mapq,
+        min_baseq=args.min_baseq,
+        threads=args.threads,
+        barcode=args.barcode,
+        barcode_tag=args.barcode_tag,
     )
     return 0
 
