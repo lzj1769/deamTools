@@ -8,10 +8,10 @@ import pysam
 import pytest
 
 from deamtools.preprocessing.bam2bw import (
-    _load_regions,
     _signal_for_region,
     run_bam2bw,
 )
+from deamtools.utils.regions import _load_regions
 
 # ---------------------------------------------------------------------------
 # Reference sequence used across all tests.
