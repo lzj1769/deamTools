@@ -427,36 +427,40 @@ def _add_plot_motif_parser(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
         "plot_motif",
         help=(
-            "Build an enzyme-motif sequence logo from a BAM file, centered on "
-            "deamination edits or Tn5 cut sites."
+            "Build a deaminase-motif sequence logo from a per-base BigWig of "
+            "editing counts."
         ),
         description=(
-            "Build a per-base sequence logo of the enzyme motif observed in\n"
-            "aligned reads. In the default 'access' mode, the window is\n"
-            "centered on each C->T (forward read) / G->A (reverse read)\n"
-            "deamination edit and the centre base is excluded so the logo\n"
-            "reflects the enzyme's flanking sequence preference. In 'atac'\n"
-            "mode, the window is centered on the Tn5 cut site of each read.\n"
+            "Build a sequence logo of the deaminase's flanking-sequence\n"
+            "preference from a per-base BigWig of editing-event counts (as\n"
+            "produced by 'deamtools bam2bw' in count mode) and the reference\n"
+            "FASTA.\n"
+            "\n"
+            "For every base with a non-zero count, the surrounding window of\n"
+            "reference sequence is read from the FASTA and contributed to a\n"
+            "position-weight matrix weighted by the count. The centre base --\n"
+            "the editing site itself -- is excluded so the logo reflects the\n"
+            "enzyme's flanking sequence preference. When the centre is a 'G'\n"
+            "the window is reverse-complemented before being accumulated, so\n"
+            "C->T and G->A events are unified in the C->T orientation.\n"
             "\n"
             "Counts are converted to information content (bits) and rendered\n"
             "with logomaker. The bit-score matrix is also written to CSV."
         ),
         epilog=(
             "examples:\n"
-            "  # Whole-genome deaminase motif logo, 10-bp window\n"
-            "  deamtools plot_motif --bam sample.bam --fasta hg38.fa \\\n"
+            "  # Whole-BigWig deaminase motif logo, 10-bp window\n"
+            "  deamtools plot_motif --bigwig sample.bw --fasta hg38.fa \\\n"
             "      --output motif.png\n"
             "\n"
-            "  # Restricted to peaks, wider window\n"
-            "  deamtools plot_motif --bam sample.bam --fasta hg38.fa \\\n"
+            "  # Restrict to peaks, wider window\n"
+            "  deamtools plot_motif --bigwig sample.bw --fasta hg38.fa \\\n"
             "      --regions peaks.bed --window_size 20 --output motif.pdf\n"
             "\n"
-            "  # Tn5 cut-site logo (ATAC-style assays)\n"
-            "  deamtools plot_motif --bam sample.bam --fasta hg38.fa \\\n"
-            "      --mode atac --output tn5_motif.png\n"
-            "\n"
             "notes:\n"
-            "  * The BAM must be coordinate-sorted and indexed (.bai).\n"
+            "  * The BigWig should be produced by 'deamtools bam2bw --mode\n"
+            "    count --extend_size 0' so that each non-zero base represents\n"
+            "    one editing site.\n"
             "  * The FASTA must be indexed with 'samtools faidx' (.fai).\n"
             "  * A '.csv' of the bit-score matrix is written next to the plot."
         ),
@@ -464,10 +468,13 @@ def _add_plot_motif_parser(subparsers: argparse._SubParsersAction) -> None:
     )
 
     parser.add_argument(
-        "--bam",
+        "--bigwig",
         required=True,
         metavar="FILE",
-        help="Coordinate-sorted, indexed BAM file (.bai required).",
+        help=(
+            "Per-base BigWig of editing-event counts (e.g. produced by "
+            "'deamtools bam2bw --mode count')."
+        ),
     )
     parser.add_argument(
         "--fasta",
@@ -490,18 +497,7 @@ def _add_plot_motif_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="FILE",
         help=(
             "BED file of regions to restrict analysis to. "
-            "When omitted, the entire genome is processed."
-        ),
-    )
-    parser.add_argument(
-        "--mode",
-        default="access",
-        choices=["access", "atac"],
-        metavar="MODE",
-        help=(
-            "Source of motif centres. 'access' (default) uses C->T (forward) "
-            "and G->A (reverse) deamination edits and excludes the centre "
-            "base; 'atac' uses Tn5 cut sites at read_start+4 / read_end-4."
+            "When omitted, every chromosome in the BigWig header is processed."
         ),
     )
     parser.add_argument(
@@ -510,23 +506,6 @@ def _add_plot_motif_parser(subparsers: argparse._SubParsersAction) -> None:
         default=10,
         metavar="INT",
         help="Window size in bp around the motif centre. Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--min_mapq",
-        type=int,
-        default=20,
-        metavar="INT",
-        help="Minimum read mapping quality. Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--min_baseq",
-        type=int,
-        default=20,
-        metavar="INT",
-        help=(
-            "Minimum base quality at the deamination position (access mode "
-            "only). Default: %(default)s."
-        ),
     )
 
     parser.set_defaults(func=_run_plot_motif)
@@ -587,14 +566,11 @@ def _run_bam2fragment(args: argparse.Namespace) -> int:
 def _run_plot_motif(args: argparse.Namespace) -> int:
     _log_invocation(args)
     run_plot_motif(
-        bam_path=args.bam,
+        bigwig_path=args.bigwig,
         fasta_path=args.fasta,
         output_path=args.output,
         bed_path=args.regions,
-        mode=args.mode,
         window_size=args.window_size,
-        min_mapq=args.min_mapq,
-        min_baseq=args.min_baseq,
     )
     return 0
 
