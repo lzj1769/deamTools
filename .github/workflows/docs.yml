@@ -22,6 +22,8 @@ jobs:
       - uses: actions/checkout@v4
       # Enables GitHub Pages (source = GitHub Actions) on the first run.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
