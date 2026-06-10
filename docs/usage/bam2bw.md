@@ -5,7 +5,7 @@ Convert a coordinate-sorted BAM file to a BigWig track of per-base C→T deamina
 ## Synopsis
 
 ```
-deamtools bam2bw --bam FILE --fasta FILE --output FILE [options]
+deamtools bam2bw --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 ```
 
 ## Required inputs
@@ -14,7 +14,8 @@ deamtools bam2bw --bam FILE --fasta FILE --output FILE [options]
 |---|---|
 | `--bam FILE` | Coordinate-sorted BAM file. Must be accompanied by an index (`.bai`). |
 | `--fasta FILE` | Reference FASTA file used during alignment. Must be indexed with `samtools faidx` (`.fai`). |
-| `--output FILE` | Output BigWig path (`.bw`). Parent directories are created automatically. |
+| `--out_dir DIR` | Output directory. Created automatically if it does not exist. |
+| `--out_name NAME` | Base name (without extension) for the output. The BigWig is written to `<out_dir>/<out_name>.bw`. |
 
 ## Optional arguments
 
@@ -82,10 +83,11 @@ cut -f1,2 hg38.fa.fai > hg38.chrom.sizes
 deamtools bam2bw \
     --bam sample.sorted.bam \
     --fasta hg38.fa \
-    --output results/sample.bw
+    --out_dir results \
+    --out_name sample
 ```
 
-Uses default MAPQ ≥ 20 and base quality ≥ 20. Chromosome sizes are read from the BAM header.
+Writes `results/sample.bw`. Uses default MAPQ ≥ 20 and base quality ≥ 20. Chromosome sizes are read from the BAM header.
 
 ### Restrict to peaks and use stricter quality filters
 
@@ -96,7 +98,8 @@ deamtools bam2bw \
     --regions peaks.bed \
     --min_mapq 30 \
     --min_baseq 30 \
-    --output results/sample_peaks.bw
+    --out_dir results \
+    --out_name sample_peaks
 ```
 
 Only reads overlapping intervals in `peaks.bed` are processed, which is much faster than a whole-genome run when peaks cover a small fraction of the genome.
@@ -108,7 +111,8 @@ deamtools bam2bw \
     --bam sample.sorted.bam \
     --fasta hg38.fa \
     --extend_size 50 \
-    --output results/sample_extended.bw
+    --out_dir results \
+    --out_name sample_extended
 ```
 
 Each C→T event contributes signal to a 101-bp window centred on the event position. Useful when the raw per-base signal is too sparse for downstream peak calling.
@@ -121,7 +125,8 @@ deamtools bam2bw \
     --fasta hg38.fa \
     --chrom_sizes hg38.chrom.sizes \
     --threads 8 \
-    --output results/sample.bw
+    --out_dir results \
+    --out_name sample
 ```
 
 ### Enable debug logging
@@ -130,7 +135,8 @@ deamtools bam2bw \
 deamtools --log_level DEBUG bam2bw \
     --bam sample.sorted.bam \
     --fasta hg38.fa \
-    --output results/sample.bw
+    --out_dir results \
+    --out_name sample
 ```
 
 Note that `--log_level` is a global flag and must appear **before** the subcommand name.

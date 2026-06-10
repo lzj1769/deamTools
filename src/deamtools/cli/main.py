@@ -9,6 +9,7 @@ from deamtools.align.align import run_align
 from deamtools.align.index import run_index
 from deamtools.preprocessing.bam2bw import run_bam2bw
 from deamtools.preprocessing.bam2fragment import run_bam2fragment
+from deamtools.qc import run_qc
 from deamtools.stat.plot_motif import run_plot_motif
 from deamtools.utils import get_version
 
@@ -60,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_align_parser(subparsers)
     _add_bam2bw_parser(subparsers)
     _add_bam2fragment_parser(subparsers)
+    _add_qc_parser(subparsers)
     _add_plot_motif_parser(subparsers)
 
     return parser
@@ -77,19 +79,26 @@ def _add_index_parser(subparsers: argparse._SubParsersAction) -> None:
             "map both top-strand-derived (C->T pattern) and bottom-strand-derived\n"
             "(G->A pattern in read orientation) deaminated reads against a single index.\n"
             "\n"
-            "Outputs (next to the input FASTA):\n"
-            "  <fasta>.fai\n"
-            "  <fasta>.deamtools.c2t\n"
-            "  <fasta>.deamtools.c2t.{amb,ann,bwt,pac,sa}\n"
+            "Outputs:\n"
+            "  <fasta>.fai                            (always next to the FASTA;\n"
+            "                                          required by the other commands)\n"
+            "  <out_dir>/<out_name>.deamtools.c2t     (converted reference)\n"
+            "  <out_dir>/<out_name>.deamtools.c2t.*   (BWA-MEM index files)\n"
+            "\n"
+            "--out_dir/--out_name default to the FASTA's directory and file name,\n"
+            "so by default the index is written right next to the FASTA (the\n"
+            "location 'deamtools align' looks in)."
         ),
         epilog=(
             "examples:\n"
             "  deamtools index --fasta hg38.fa\n"
+            "  deamtools index --fasta hg38.fa --out_dir idx --out_name hg38\n"
             "  deamtools index --fasta hg38.fa --force\n"
             "\n"
             "notes:\n"
             "  * Requires 'bwa' and 'samtools' on PATH.\n"
-            "  * Existing outputs are kept unless --force is given."
+            "  * Existing outputs are kept unless --force is given.\n"
+            "  * The .fai is always written next to the FASTA."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -98,6 +107,22 @@ def _add_index_parser(subparsers: argparse._SubParsersAction) -> None:
         required=True,
         metavar="FILE",
         help="Reference FASTA file to index.",
+    )
+    parser.add_argument(
+        "--out_dir",
+        metavar="DIR",
+        help=(
+            "Directory for the converted reference + BWA index. "
+            "Default: the FASTA's directory."
+        ),
+    )
+    parser.add_argument(
+        "--out_name",
+        metavar="NAME",
+        help=(
+            "Base name for the converted reference + BWA index. "
+            "Default: the FASTA file name."
+        ),
     )
     parser.add_argument(
         "--force",
@@ -126,12 +151,12 @@ def _add_align_parser(subparsers: argparse._SubParsersAction) -> None:
             "examples:\n"
             "  # Paired-end\n"
             "  deamtools align --fasta hg38.fa --fastq1 r1.fq.gz --fastq2 r2.fq.gz \\\n"
-            "      --output sample.bam --threads 8\n"
+            "      --out_dir results --out_name sample --threads 8\n"
             "\n"
             "  # Single-end with a read group\n"
             "  deamtools align --fasta hg38.fa --fastq1 reads.fq.gz \\\n"
             "      --read_group '@RG\\tID:s1\\tSM:sample1\\tLB:lib1\\tPL:ILLUMINA' \\\n"
-            "      --output sample.bam\n"
+            "      --out_dir results --out_name sample\n"
             "\n"
             "notes:\n"
             "  * Run 'deamtools index --fasta <ref>' once before aligning.\n"
@@ -146,6 +171,15 @@ def _add_align_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Reference FASTA. Must have been indexed with 'deamtools index'.",
     )
     parser.add_argument(
+        "--index",
+        metavar="FILE",
+        help=(
+            "Path to the converted reference built by 'deamtools index' "
+            "(<out_dir>/<out_name>.deamtools.c2t). Use this when the index was "
+            "built with a custom --out_dir/--out_name. Default: next to the FASTA."
+        ),
+    )
+    parser.add_argument(
         "--fastq1",
         required=True,
         metavar="FILE",
@@ -157,10 +191,19 @@ def _add_align_parser(subparsers: argparse._SubParsersAction) -> None:
         help="FASTQ for read 2 (paired-end). Omit for single-end alignment.",
     )
     parser.add_argument(
-        "--output",
+        "--out_dir",
         required=True,
-        metavar="FILE",
-        help="Output sorted BAM file. Parent directories are created automatically.",
+        metavar="DIR",
+        help="Output directory. Created if it does not exist.",
+    )
+    parser.add_argument(
+        "--out_name",
+        required=True,
+        metavar="NAME",
+        help=(
+            "Base name (without extension) for the output; writes a sorted, "
+            "indexed <out_dir>/<out_name>.bam."
+        ),
     )
     parser.add_argument(
         "--threads",
@@ -199,16 +242,17 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         epilog=(
             "examples:\n"
             "  # Whole-genome run with default quality thresholds\n"
-            "  deamtools bam2bw --bam sample.bam --fasta hg38.fa --output sample.bw\n"
+            "  deamtools bam2bw --bam sample.bam --fasta hg38.fa \\\n"
+            "      --out_dir results --out_name sample\n"
             "\n"
             "  # Region-restricted run with stricter quality filters and 4 threads\n"
             "  deamtools bam2bw --bam sample.bam --fasta hg38.fa \\\n"
             "      --regions peaks.bed --min_mapq 30 --min_baseq 30 \\\n"
-            "      --threads 4 --output sample_peaks.bw\n"
+            "      --threads 4 --out_dir results --out_name sample_peaks\n"
             "\n"
             "  # Extend each editing site by 50 bp in both directions\n"
             "  deamtools bam2bw --bam sample.bam --fasta hg38.fa \\\n"
-            "      --extend_size 50 --output sample_extended.bw\n"
+            "      --extend_size 50 --out_dir results --out_name sample_extended\n"
             "\n"
             "notes:\n"
             "  * The BAM file must be coordinate-sorted and indexed (.bai).\n"
@@ -232,10 +276,19 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Path to the reference FASTA file indexed with 'samtools faidx' (.fai required).",
     )
     parser.add_argument(
-        "--output",
+        "--out_dir",
         required=True,
-        metavar="FILE",
-        help="Output BigWig file path (.bw). Parent directories are created automatically.",
+        metavar="DIR",
+        help="Output directory. Created if it does not exist.",
+    )
+    parser.add_argument(
+        "--out_name",
+        required=True,
+        metavar="NAME",
+        help=(
+            "Base name (without extension) for the output BigWig; writes "
+            "<out_dir>/<out_name>.bw."
+        ),
     )
 
     # Optional inputs
@@ -423,6 +476,127 @@ def _add_bam2fragment_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_run_bam2fragment)
 
 
+def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
+    parser = subparsers.add_parser(
+        "qc",
+        help=(
+            "Compute quality-control metrics (editing rate, enzyme context "
+            "bias, fragment sizes, TSS enrichment) for a deaminase BAM."
+        ),
+        description=(
+            "Summarise a coordinate-sorted BAM and its reference FASTA into the\n"
+            "quality-control metrics most useful for a deaminase footprinting\n"
+            "experiment:\n"
+            "\n"
+            "  * Read statistics: totals plus duplicate, properly-paired,\n"
+            "    secondary and supplementary fractions.\n"
+            "  * Editing statistics: genome-wide deamination rate (edits over\n"
+            "    editable C/G opportunities) and edits-per-read distribution.\n"
+            "  * Trinucleotide context bias: edit fraction per cytosine-centred\n"
+            "    trinucleotide (G->A events reverse-complemented to the C->T\n"
+            "    orientation) -- the enzyme's sequence-preference fingerprint.\n"
+            "  * Fragment-length distribution from properly-paired reads.\n"
+            "  * TSS enrichment (optional, when --tss is supplied).\n"
+            "\n"
+            "Two files are written: a machine-readable JSON and a self-contained,\n"
+            "MultiQC-style HTML report that embeds the summary figure and\n"
+            "documents the meaning of every metric inline\n"
+            "(<out_dir>/<out_name>.json and .html)."
+        ),
+        epilog=(
+            "examples:\n"
+            "  # Core metrics from BAM + FASTA\n"
+            "  deamtools qc --bam sample.bam --fasta hg38.fa \\\n"
+            "      --out_dir results --out_name sample\n"
+            "\n"
+            "  # Add TSS enrichment and run on 4 threads\n"
+            "  deamtools qc --bam sample.bam --fasta hg38.fa --tss tss.bed \\\n"
+            "      --threads 4 --out_dir results --out_name sample\n"
+            "\n"
+            "notes:\n"
+            "  * The BAM must be coordinate-sorted and indexed (.bai).\n"
+            "  * The FASTA must be indexed with 'samtools faidx' (.fai).\n"
+            "  * The TSS BED is read as (chrom, start, end); the TSS is taken as\n"
+            "    the interval midpoint."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    parser.add_argument(
+        "--bam",
+        required=True,
+        metavar="FILE",
+        help="Coordinate-sorted, indexed BAM file (.bai required).",
+    )
+    parser.add_argument(
+        "--fasta",
+        required=True,
+        metavar="FILE",
+        help="Reference FASTA file indexed with 'samtools faidx' (.fai required).",
+    )
+    parser.add_argument(
+        "--out_dir",
+        required=True,
+        metavar="DIR",
+        help="Output directory. Created if it does not exist.",
+    )
+    parser.add_argument(
+        "--out_name",
+        required=True,
+        metavar="NAME",
+        help=(
+            "Base name (without extension) for the outputs; writes "
+            "<out_dir>/<out_name>.json and <out_dir>/<out_name>.html."
+        ),
+    )
+    parser.add_argument(
+        "--tss",
+        metavar="FILE",
+        help=(
+            "BED file of transcription start sites. When supplied, an "
+            "ATAC-style TSS enrichment score and profile are computed."
+        ),
+    )
+    parser.add_argument(
+        "--tss_flank",
+        type=int,
+        default=2000,
+        metavar="INT",
+        help="Half-width in bp of the window around each TSS. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--min_mapq",
+        type=int,
+        default=20,
+        metavar="INT",
+        help="Minimum read mapping quality. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--min_baseq",
+        type=int,
+        default=20,
+        metavar="INT",
+        help=(
+            "Minimum base quality for a position to count as an editing "
+            "opportunity. Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        metavar="INT",
+        help="Number of threads for parallel chromosome processing. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--no_plot",
+        action="store_true",
+        help="Skip rendering/embedding the summary figure in the HTML report.",
+    )
+
+    parser.set_defaults(func=_run_qc)
+
+
 def _add_plot_motif_parser(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
         "plot_motif",
@@ -513,7 +687,12 @@ def _add_plot_motif_parser(subparsers: argparse._SubParsersAction) -> None:
 
 def _run_index(args: argparse.Namespace) -> int:
     _log_invocation(args)
-    run_index(fasta_path=args.fasta, force=args.force)
+    run_index(
+        fasta_path=args.fasta,
+        out_dir=args.out_dir,
+        out_name=args.out_name,
+        force=args.force,
+    )
     return 0
 
 
@@ -523,9 +702,11 @@ def _run_align(args: argparse.Namespace) -> int:
         fasta_path=args.fasta,
         fastq1=args.fastq1,
         fastq2=args.fastq2,
-        output_bam=args.output,
+        out_dir=args.out_dir,
+        out_name=args.out_name,
         threads=args.threads,
         read_group=args.read_group,
+        index_path=args.index,
     )
     return 0
 
@@ -535,7 +716,8 @@ def _run_bam2bw(args: argparse.Namespace) -> int:
     run_bam2bw(
         bam_path=args.bam,
         fasta_path=args.fasta,
-        output_path=args.output,
+        out_dir=args.out_dir,
+        out_name=args.out_name,
         chrom_sizes_path=args.chrom_sizes,
         bed_path=args.regions,
         min_mapq=args.min_mapq,
@@ -559,6 +741,23 @@ def _run_bam2fragment(args: argparse.Namespace) -> int:
         threads=args.threads,
         barcode=args.barcode,
         barcode_tag=args.barcode_tag,
+    )
+    return 0
+
+
+def _run_qc(args: argparse.Namespace) -> int:
+    _log_invocation(args)
+    run_qc(
+        bam_path=args.bam,
+        fasta_path=args.fasta,
+        out_dir=args.out_dir,
+        out_name=args.out_name,
+        tss_path=args.tss,
+        min_mapq=args.min_mapq,
+        min_baseq=args.min_baseq,
+        threads=args.threads,
+        tss_flank=args.tss_flank,
+        plot=not args.no_plot,
     )
     return 0
 
