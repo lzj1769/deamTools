@@ -43,11 +43,12 @@ This additionally installs `pytest`, `pytest-cov`, `ruff`, `black`, and `mypy`.
 
 ### Documentation extras
 
-To build this documentation locally:
+This documentation is built with Sphinx (MyST Markdown + the Read the Docs theme). To build it locally:
 
 ```bash
 pip install -e ".[docs]"
-mkdocs serve   # live preview at http://127.0.0.1:8000
+sphinx-build -b html docs docs/_build/html
+# open docs/_build/html/index.html
 ```
 
 ## Python dependencies

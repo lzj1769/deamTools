@@ -64,3 +64,30 @@ To understand how editing events are detected and counted, see the
 DeamTools is developed on GitHub at
 [github.com/lzj1769/deamTools](https://github.com/lzj1769/deamTools). Please report
 bugs and feature requests via the issue tracker. Released under the MIT License.
+
+```{toctree}
+:hidden:
+:caption: Getting started
+
+installation
+```
+
+```{toctree}
+:hidden:
+:caption: Commands
+
+usage/index
+usage/align
+usage/bam2bw
+usage/bam2fragment
+usage/qc
+usage/plot_motif
+```
+
+```{toctree}
+:hidden:
+:caption: Reference
+
+algorithm
+api
+```

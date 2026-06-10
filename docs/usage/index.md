@@ -23,8 +23,9 @@ deamtools index --fasta FILE [--out_dir DIR] [--out_name NAME] [--force]
 | `--force` | *(off)* | Rebuild every output even if it already exists. By default, steps whose output is already present are skipped. |
 | `--log_level LEVEL` | `INFO` | Global flag (before the subcommand): `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 
-!!! note
-    `--out_dir`/`--out_name` control only the deamtools-specific converted reference and its BWA index. The standard `<fasta>.fai` is **always** written next to the FASTA, because the pysam-based subcommands (`bam2bw`, `bam2fragment`, `qc`, `plot_motif`) require it there. By default the converted index is also written next to the FASTA — which is where `deamtools align` looks for it.
+:::{note}
+`--out_dir`/`--out_name` control only the deamtools-specific converted reference and its BWA index. The standard `<fasta>.fai` is **always** written next to the FASTA, because the pysam-based subcommands (`bam2bw`, `bam2fragment`, `qc`, `plot_motif`) require it there. By default the converted index is also written next to the FASTA — which is where `deamtools align` looks for it.
+:::
 
 ## Requirements
 

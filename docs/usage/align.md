@@ -27,8 +27,9 @@ deamtools align --fasta FILE --fastq1 FILE --out_dir DIR --out_name NAME [option
 | `--threads INT` | `1` | Total threads, split between `bwa mem` and `samtools sort`. |
 | `--log_level LEVEL` | `INFO` | Global flag (before the subcommand): `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 
-!!! note
-    By default `align` looks for the converted index next to the FASTA (`<fasta>.deamtools.c2t`). If you built it with a custom location — `deamtools index --fasta ref.fa --out_dir idx --out_name foo` — point `align` at it with `--index idx/foo.deamtools.c2t`. The `index` command logs this exact path (`Converted index: …`) so you can copy it.
+:::{note}
+By default `align` looks for the converted index next to the FASTA (`<fasta>.deamtools.c2t`). If you built it with a custom location — `deamtools index --fasta ref.fa --out_dir idx --out_name foo` — point `align` at it with `--index idx/foo.deamtools.c2t`. The `index` command logs this exact path (`Converted index: …`) so you can copy it.
+:::
 
 ## Requirements
 
