@@ -109,6 +109,39 @@ run_qc(
 
 Compute QC metrics and write `<out_dir>/<out_name>.json` plus a self-contained HTML report. The report includes the **deaminase sequence-motif logo**, built directly from the editing events in the BAM. Returns the metrics dictionary. Supplying `tss_path` adds TSS enrichment.
 
+## `deamtools.motif.matching`
+
+### `run_motif_matching`
+
+```python
+from deamtools.motif.matching import run_motif_matching
+
+run_motif_matching(
+    fasta_path: str,
+    bed_path: str,
+    output_path: str,
+    motifs: list | None = None,
+    release: str = "JASPAR2024",
+    collection: str = "CORE",
+    tax_group: list[str] | None = None,
+    pseudocounts: float = 0.0001,
+    p_value: float = 1e-4,
+) -> None
+```
+
+Scan the sequence of each BED region with MOODS and write motif matches to `output_path` as 6-column BED (`chrom, start, end, motif, score, strand`). Motifs are fetched from JASPAR (needs `pyjaspar`) unless `motifs` is passed explicitly.
+
+### `prepare_scanner` / `scan_sequence`
+
+```python
+from deamtools.motif.matching import prepare_scanner, scan_sequence
+
+scanner = prepare_scanner(motifs, pseudocounts=0.0001, p_value=5e-05)
+matches = scan_sequence(scanner, motifs, seq, chrom, offset=0)
+```
+
+`prepare_scanner` builds a `MOODS.scan.Scanner` (log-odds matrices, p-value thresholds, reverse complements). `scan_sequence` scans one sequence and returns `(chrom, start, end, name, score, strand)` tuples. These let you scan in-memory sequences/motifs without writing a BED.
+
 ## `deamtools.utils`
 
 ```python

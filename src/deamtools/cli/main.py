@@ -7,6 +7,7 @@ import sys
 
 from deamtools.align.align import run_align
 from deamtools.align.index import run_index
+from deamtools.motif.matching import run_motif_matching
 from deamtools.preprocessing.bam2bw import run_bam2bw
 from deamtools.preprocessing.bam2fragment import run_bam2fragment
 from deamtools.qc import run_qc
@@ -61,6 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_bam2bw_parser(subparsers)
     _add_bam2fragment_parser(subparsers)
     _add_qc_parser(subparsers)
+    _add_matching_parser(subparsers)
 
     return parser
 
@@ -595,6 +597,85 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_run_qc)
 
 
+def _add_matching_parser(subparsers: argparse._SubParsersAction) -> None:
+    parser = subparsers.add_parser(
+        "matching",
+        help=(
+            "Scan genomic regions for transcription-factor motif matches and "
+            "write a BED of binding sites."
+        ),
+        description=(
+            "Scan the reference sequence of a set of regions (e.g. peaks) for\n"
+            "transcription-factor motif occurrences using MOODS, and write the\n"
+            "hits as a BED of motif-predicted binding sites.\n"
+            "\n"
+            "Each motif's count matrix is converted to a log-odds matrix against\n"
+            "a flat background; a per-motif score threshold is derived from\n"
+            "--p_value and both strands are scanned. Motifs are fetched from\n"
+            "JASPAR (requires the optional 'pyjaspar' package)."
+        ),
+        epilog=(
+            "examples:\n"
+            "  deamtools matching --fasta hg38.fa --regions peaks.bed \\\n"
+            "      --output mpbs.bed\n"
+            "\n"
+            "  deamtools matching --fasta hg38.fa --regions peaks.bed \\\n"
+            "      --collection CORE --tax_group vertebrates --p_value 1e-4 \\\n"
+            "      --output mpbs.bed\n"
+            "\n"
+            "notes:\n"
+            "  * The FASTA must be indexed with 'samtools faidx' (.fai).\n"
+            "  * Motif fetching needs 'pyjaspar' (pip install pyjaspar).\n"
+            "  * Output is 6-column BED: chrom, start, end, motif, score, strand."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--fasta",
+        required=True,
+        metavar="FILE",
+        help="Reference FASTA indexed with 'samtools faidx' (.fai required).",
+    )
+    parser.add_argument(
+        "--regions",
+        required=True,
+        metavar="FILE",
+        help="BED file of regions to scan (overlapping intervals are merged).",
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        metavar="FILE",
+        help="Output BED path. Parent directories are created automatically.",
+    )
+    parser.add_argument(
+        "--jaspar_release",
+        default="JASPAR2024",
+        metavar="STR",
+        help="JASPAR release to fetch motifs from. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--collection",
+        default="CORE",
+        metavar="STR",
+        help="JASPAR motif collection. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--tax_group",
+        nargs="*",
+        metavar="GROUP",
+        help="JASPAR taxonomic group(s). Default: vertebrates.",
+    )
+    parser.add_argument(
+        "--p_value",
+        type=float,
+        default=1e-4,
+        metavar="FLOAT",
+        help="Significance threshold for motif hits. Default: %(default)s.",
+    )
+    parser.set_defaults(func=_run_matching)
+
+
 def _run_index(args: argparse.Namespace) -> int:
     _log_invocation(args)
     run_index(
@@ -668,6 +749,20 @@ def _run_qc(args: argparse.Namespace) -> int:
         threads=args.threads,
         tss_flank=args.tss_flank,
         plot=not args.no_plot,
+    )
+    return 0
+
+
+def _run_matching(args: argparse.Namespace) -> int:
+    _log_invocation(args)
+    run_motif_matching(
+        fasta_path=args.fasta,
+        bed_path=args.regions,
+        output_path=args.output,
+        release=args.jaspar_release,
+        collection=args.collection,
+        tax_group=args.tax_group,
+        p_value=args.p_value,
     )
     return 0
 
