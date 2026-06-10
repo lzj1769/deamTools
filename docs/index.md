@@ -10,13 +10,53 @@ It is developed for assays such as ACCESS-ATAC and related deaminase footprintin
 methods, and provides a small set of composable commands that cover the full workflow
 from raw reads to quantitative tracks and quality reports.
 
+## Background
+
+Chromatin accessibility marks the regulatory regions of the genome — promoters,
+enhancers, and the binding sites of transcription factors (TFs). The established
+assays, **DNase-seq** and **ATAC-seq**, read out accessibility from the *ends* of
+enzymatically cut or transposed fragments, which yields at most two informative
+positions per fragment and limits resolution to roughly the fragment length.
+
+Deaminase-based assays instead use a double-stranded DNA cytosine deaminase to
+**write many marks along each accessible molecule**. Every editable cytosine in
+exposed DNA can be converted, so a single read carries dozens of accessibility
+measurements rather than two. This gives several advantages:
+
+- **Single-base resolution** — editing is recorded per cytosine, not per fragment end.
+- **Footprints** — DNA bound by a TF or nucleosome is shielded from editing, leaving a
+  local depletion that pinpoints the bound element.
+- **Single-molecule / single-allele readout** — because the marks are encoded as
+  sequence changes, each read reports the accessibility state of one DNA molecule, and
+  is compatible with standard short-read sequencing and PCR.
+
 ## How it works
 
 A deaminase converts cytosine (C) to uracil (U) on exposed single-stranded DNA;
-after PCR and sequencing this is read as a C→T substitution (or G→A on the opposite
-strand). The density of these edits reports chromatin accessibility, while proteins
-bound to DNA shield it from editing, leaving footprints. DeamTools detects these
-edits from aligned reads and summarises them at single-base resolution.
+after PCR and sequencing this is read as a **C→T** substitution on the top strand, or
+a **G→A** substitution on reads from the bottom strand. The density of these edits
+reports chromatin accessibility, while proteins bound to DNA shield it from editing,
+leaving footprints.
+
+DeamTools handles the two computational challenges this creates. First, heavily edited
+reads align poorly to an unmodified genome, so `index`/`align` use a bwa-meth-style
+three-letter alignment against a converted reference. Second, the edits must be
+distinguished from the reference and tallied; `bam2bw`, `bam2fragment`, and `qc`
+detect C→T / G→A mismatches at aligned positions and summarise them — as per-base
+tracks, per-fragment tables, or QC metrics — at single-base resolution.
+
+## Key features
+
+- **Deamination-aware alignment** of heavily converted reads, with original sequences
+  and chromosome names restored in a standard sorted BAM.
+- **Per-base editing tracks** (BigWig) as raw counts or conversion ratios, with optional
+  signal extension and region restriction.
+- **Per-fragment tables** capturing single-molecule edit patterns, with cell-barcode
+  support for single-cell data.
+- **Quality control** in a self-contained HTML report: editing rate, per-read edit-rate
+  distribution, enzyme context bias, fragment sizes, and TSS enrichment.
+- **Enzyme-bias diagnostics**, including a sequence-preference logo (`plot_motif`).
+- **Multi-threaded** and **region-restricted** processing for whole-genome or targeted runs.
 
 ## Components
 
@@ -39,6 +79,34 @@ FASTQ ─▶ index ─▶ align ─▶ BAM ─┬─▶ bam2bw ─────�
                                 └─▶ qc ──────────▶ JSON + HTML report
 ```
 
+## Quick start
+
+A typical end-to-end run, from a reference and FASTQs to tracks and a QC report:
+
+```bash
+# 1. One-time: index the reference (writes <fasta>.fai + the converted BWA index)
+deamtools index --fasta genome.fa
+
+# 2. Align deaminated reads -> results/sample.bam (+ .bai)
+deamtools align --fasta genome.fa \
+    --fastq1 sample_R1.fq.gz --fastq2 sample_R2.fq.gz \
+    --out_dir results --out_name sample
+
+# 3. Per-base editing track -> results/sample.bw
+deamtools bam2bw --bam results/sample.bam --fasta genome.fa \
+    --out_dir results --out_name sample
+
+# 4. Quality-control report -> results/sample.json + results/sample.html
+deamtools qc --bam results/sample.bam --fasta genome.fa \
+    --out_dir results --out_name sample
+
+# 5. Deaminase sequence-preference logo -> results/sample.motif.png
+deamtools plot_motif --bigwig results/sample.bw --fasta genome.fa \
+    --output results/sample.motif.png
+```
+
+See each [command page](usage/index.md) for the full option list.
+
 ## Supported file formats
 
 | Format | Used by | Role |
@@ -58,6 +126,27 @@ FASTQ ─▶ index ─▶ align ─▶ BAM ─┬─▶ bam2bw ─────�
 To understand how editing events are detected and counted, see the
 [Algorithm](algorithm.md) page; for the Python API, see the
 [API reference](api.md).
+
+## Related methods and further reading
+
+Deaminase-based accessibility and footprinting is an active area; DeamTools targets
+ACCESS-ATAC but the file formats and metrics apply broadly. Key methods:
+
+- **ACCESS-ATAC** — Yu, Li, *et al.* Deaminase-mediated chromatin accessibility profiling
+  with single-allele resolution. *bioRxiv* (2024).
+  [doi:10.1101/2024.12.17.628768](https://doi.org/10.1101/2024.12.17.628768)
+- **DAF-seq** — Swanson *et al.* Mapping single-cell diploid chromatin fiber architectures.
+  *Nature Biotechnology* (2025).
+  [doi:10.1038/s41587-025-02914-3](https://doi.org/10.1038/s41587-025-02914-3)
+- **TDAC-seq** — Roh *et al.* Coupling CRISPR scanning with targeted chromatin accessibility
+  profiling using a double-stranded DNA deaminase. *Nature Methods* (2025).
+  [doi:10.1038/s41592-025-02811-2](https://doi.org/10.1038/s41592-025-02811-2)
+- **cFOOT-seq** — Wang *et al.* Genome-wide investigation of transcription factor footprints
+  using cFOOT-seq. *Protein & Cell* (2025).
+  [doi:10.1093/procel/pwaf071](https://doi.org/10.1093/procel/pwaf071)
+- **FOODIE** — He *et al.* Genome-wide single-cell and single-molecule footprinting of
+  transcription factors with deaminase. *PNAS* (2024).
+  [doi:10.1073/pnas.2423270121](https://doi.org/10.1073/pnas.2423270121)
 
 ## Source and issues
 

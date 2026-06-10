@@ -15,13 +15,14 @@ deamtools index --fasta FILE [--out_dir DIR] [--out_name NAME] [--force]
 
 ## Arguments
 
-| Argument | Default | Description |
-|---|---|---|
-| `--fasta FILE` | *(required)* | Reference FASTA to index. |
-| `--out_dir DIR` | *(the FASTA's directory)* | Directory for the converted reference and BWA index. |
-| `--out_name NAME` | *(the FASTA file name)* | Base name for the converted reference and BWA index. |
-| `--force` | *(off)* | Rebuild every output even if it already exists. By default, steps whose output is already present are skipped. |
-| `--log_level LEVEL` | `INFO` | Global flag (before the subcommand): `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+
+| Argument            | Default                   | Description                                                                                                    |
+| ------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `--fasta FILE`      | *(required)*              | Reference FASTA to index.                                                                                      |
+| `--out_dir DIR`     | *(the FASTA's directory)* | Directory for the converted reference and BWA index.                                                           |
+| `--out_name NAME`   | *(the FASTA file name)*   | Base name for the converted reference and BWA index.                                                           |
+| `--force`           | *(off)*                   | Rebuild every output even if it already exists. By default, steps whose output is already present are skipped. |
+| `--log_level LEVEL` | `INFO`                    | Global flag (before the subcommand):`DEBUG`, `INFO`, `WARNING`, `ERROR`.                                       |
 
 :::{note}
 `--out_dir`/`--out_name` control only the deamtools-specific converted reference and its BWA index. The standard `<fasta>.fai` is **always** written next to the FASTA, because the pysam-based subcommands (`bam2bw`, `bam2fragment`, `qc`, `plot_motif`) require it there. By default the converted index is also written next to the FASTA — which is where `deamtools align` looks for it.
@@ -42,11 +43,12 @@ Deaminated reads carry many `C→T` (top strand) or `G→A` (bottom strand) conv
 
 ## Outputs
 
-| File | Location | Description |
-|---|---|---|
-| `<fasta>.fai` | next to the FASTA | Standard FASTA index (`samtools faidx`). |
-| `<out_dir>/<out_name>.deamtools.c2t` | `--out_dir` | The doubly-converted reference. |
-| `<out_dir>/<out_name>.deamtools.c2t.{amb,ann,bwt,pac,sa}` | `--out_dir` | BWA-MEM index files. |
+
+| File                                                      | Location          | Description                              |
+| --------------------------------------------------------- | ----------------- | ---------------------------------------- |
+| `<fasta>.fai`                                             | next to the FASTA | Standard FASTA index (`samtools faidx`). |
+| `<out_dir>/<out_name>.deamtools.c2t`                      | `--out_dir`       | The doubly-converted reference.          |
+| `<out_dir>/<out_name>.deamtools.c2t.{amb,ann,bwt,pac,sa}` | `--out_dir`       | BWA-MEM index files.                     |
 
 With the defaults, `<out_dir>/<out_name>` resolves to the FASTA's own path, so the converted index is written as `<fasta>.deamtools.c2t*` next to the FASTA.
 
