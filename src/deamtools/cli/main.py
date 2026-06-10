@@ -10,7 +10,6 @@ from deamtools.align.index import run_index
 from deamtools.preprocessing.bam2bw import run_bam2bw
 from deamtools.preprocessing.bam2fragment import run_bam2fragment
 from deamtools.qc import run_qc
-from deamtools.stat.plot_motif import run_plot_motif
 from deamtools.utils import get_version
 
 logger = logging.getLogger(__name__)
@@ -62,7 +61,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_bam2bw_parser(subparsers)
     _add_bam2fragment_parser(subparsers)
     _add_qc_parser(subparsers)
-    _add_plot_motif_parser(subparsers)
 
     return parser
 
@@ -597,94 +595,6 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_run_qc)
 
 
-def _add_plot_motif_parser(subparsers: argparse._SubParsersAction) -> None:
-    parser = subparsers.add_parser(
-        "plot_motif",
-        help=(
-            "Build a deaminase-motif sequence logo from a per-base BigWig of "
-            "editing counts."
-        ),
-        description=(
-            "Build a sequence logo of the deaminase's flanking-sequence\n"
-            "preference from a per-base BigWig of editing-event counts (as\n"
-            "produced by 'deamtools bam2bw' in count mode) and the reference\n"
-            "FASTA.\n"
-            "\n"
-            "For every base with a non-zero count, the surrounding window of\n"
-            "reference sequence is read from the FASTA and contributed to a\n"
-            "position-weight matrix weighted by the count. The centre base --\n"
-            "the editing site itself -- is excluded so the logo reflects the\n"
-            "enzyme's flanking sequence preference. When the centre is a 'G'\n"
-            "the window is reverse-complemented before being accumulated, so\n"
-            "C->T and G->A events are unified in the C->T orientation.\n"
-            "\n"
-            "Counts are converted to information content (bits) and rendered\n"
-            "with logomaker. The bit-score matrix is also written to CSV."
-        ),
-        epilog=(
-            "examples:\n"
-            "  # Whole-BigWig deaminase motif logo, 10-bp window\n"
-            "  deamtools plot_motif --bigwig sample.bw --fasta hg38.fa \\\n"
-            "      --output motif.png\n"
-            "\n"
-            "  # Restrict to peaks, wider window\n"
-            "  deamtools plot_motif --bigwig sample.bw --fasta hg38.fa \\\n"
-            "      --regions peaks.bed --window_size 20 --output motif.pdf\n"
-            "\n"
-            "notes:\n"
-            "  * The BigWig should be produced by 'deamtools bam2bw --mode\n"
-            "    count --extend_size 0' so that each non-zero base represents\n"
-            "    one editing site.\n"
-            "  * The FASTA must be indexed with 'samtools faidx' (.fai).\n"
-            "  * A '.csv' of the bit-score matrix is written next to the plot."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-
-    parser.add_argument(
-        "--bigwig",
-        required=True,
-        metavar="FILE",
-        help=(
-            "Per-base BigWig of editing-event counts (e.g. produced by "
-            "'deamtools bam2bw --mode count')."
-        ),
-    )
-    parser.add_argument(
-        "--fasta",
-        required=True,
-        metavar="FILE",
-        help="Reference FASTA file indexed with 'samtools faidx' (.fai required).",
-    )
-    parser.add_argument(
-        "--output",
-        required=True,
-        metavar="FILE",
-        help=(
-            "Output plot path. Format is inferred from extension "
-            "(e.g. .png, .pdf, .svg). A '.csv' of the bit-score matrix is "
-            "written next to it."
-        ),
-    )
-    parser.add_argument(
-        "--regions",
-        metavar="FILE",
-        help=(
-            "BED file of regions to restrict analysis to. "
-            "When omitted, every chromosome in the BigWig header is processed."
-        ),
-    )
-    parser.add_argument(
-        "--window_size",
-        type=int,
-        default=10,
-        metavar="INT",
-        help="Window size in bp around the motif centre. Default: %(default)s.",
-    )
-
-    parser.set_defaults(func=_run_plot_motif)
-
-
 def _run_index(args: argparse.Namespace) -> int:
     _log_invocation(args)
     run_index(
@@ -758,18 +668,6 @@ def _run_qc(args: argparse.Namespace) -> int:
         threads=args.threads,
         tss_flank=args.tss_flank,
         plot=not args.no_plot,
-    )
-    return 0
-
-
-def _run_plot_motif(args: argparse.Namespace) -> int:
-    _log_invocation(args)
-    run_plot_motif(
-        bigwig_path=args.bigwig,
-        fasta_path=args.fasta,
-        output_path=args.output,
-        bed_path=args.regions,
-        window_size=args.window_size,
     )
     return 0
 

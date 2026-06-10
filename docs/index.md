@@ -55,7 +55,8 @@ tracks, per-fragment tables, or QC metrics — at single-base resolution.
   support for single-cell data.
 - **Quality control** in a self-contained HTML report: editing rate, per-read edit-rate
   distribution, enzyme context bias, fragment sizes, and TSS enrichment.
-- **Enzyme-bias diagnostics**, including a sequence-preference logo (`plot_motif`).
+- **Enzyme-bias diagnostics**, including a deaminase sequence-preference logo built
+  directly from the BAM and embedded in the QC report.
 - **Multi-threaded** and **region-restricted** processing for whole-genome or targeted runs.
 
 ## Components
@@ -68,15 +69,14 @@ DeamTools is organised as a set of subcommands, run as `deamtools <command>`:
 | [`align`](usage/align.md) | Align deaminated reads (bwa-meth-style) to the indexed reference, producing a sorted BAM. |
 | [`bam2bw`](usage/bam2bw.md) | Convert a BAM to a per-base BigWig of editing counts or conversion ratios. |
 | [`bam2fragment`](usage/bam2fragment.md) | Convert a BAM to a per-fragment editing-signal table (bulk or single-cell). |
-| [`qc`](usage/qc.md) | Quality-control metrics with a self-contained HTML report. |
-| [`plot_motif`](usage/plot_motif.md) | Build a deaminase sequence-preference logo from an editing-count BigWig. |
+| [`qc`](usage/qc.md) | Quality-control metrics — including the deaminase sequence-motif logo — in a self-contained HTML report. |
 
 ## Workflow
 
 ```
-FASTQ ─▶ index ─▶ align ─▶ BAM ─┬─▶ bam2bw ──────▶ BigWig ─▶ plot_motif
+FASTQ ─▶ index ─▶ align ─▶ BAM ─┬─▶ bam2bw ──────▶ BigWig track
                                 ├─▶ bam2fragment ─▶ fragment table
-                                └─▶ qc ──────────▶ JSON + HTML report
+                                └─▶ qc ──────────▶ JSON + HTML report (+ motif logo)
 ```
 
 ## Quick start
@@ -96,13 +96,10 @@ deamtools align --fasta genome.fa \
 deamtools bam2bw --bam results/sample.bam --fasta genome.fa \
     --out_dir results --out_name sample
 
-# 4. Quality-control report -> results/sample.json + results/sample.html
+# 4. Quality-control report (with the deaminase motif logo)
+#    -> results/sample.json + results/sample.html
 deamtools qc --bam results/sample.bam --fasta genome.fa \
     --out_dir results --out_name sample
-
-# 5. Deaminase sequence-preference logo -> results/sample.motif.png
-deamtools plot_motif --bigwig results/sample.bw --fasta genome.fa \
-    --output results/sample.motif.png
 ```
 
 See each [command page](usage/index.md) for the full option list.
@@ -114,8 +111,8 @@ See each [command page](usage/index.md) for the full option list.
 | FASTA (`.fa` + `.fai`) | all | Reference genome. |
 | FASTQ (`.fq[.gz]`) | `align` | Raw sequencing reads. |
 | BAM (`.bam` + `.bai`) | most | Coordinate-sorted aligned reads. |
-| BigWig (`.bw`) | `bam2bw`, `plot_motif` | Per-base editing signal. |
-| BED | `bam2bw`, `qc`, `plot_motif` | Regions / TSS to restrict analysis to. |
+| BigWig (`.bw`) | `bam2bw` | Per-base editing signal. |
+| BED | `bam2bw`, `qc` | Regions / TSS to restrict analysis to. |
 
 ## Getting started
 
@@ -170,7 +167,6 @@ usage/align
 usage/bam2bw
 usage/bam2fragment
 usage/qc
-usage/plot_motif
 ```
 
 ```{toctree}

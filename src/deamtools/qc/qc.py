@@ -18,6 +18,10 @@ metrics most useful for judging a deaminase footprinting experiment:
   the enzyme's sequence-preference fingerprint (e.g. DddA's ``TC`` preference).
 * **Fragment-length distribution** — from the template length of properly-paired
   read pairs.
+* **Deaminase sequence motif** — a sequence logo of the reference bases flanking
+  edited cytosines, built directly from the editing events (centre excluded,
+  ``G->A`` events reverse-complemented to the ``C->T`` orientation). Shows the
+  enzyme's flanking-sequence preference.
 * **TSS enrichment** *(optional)* — the classic ATAC-style enrichment of Tn5
   insertion sites around transcription start sites, computed when a TSS BED is
   supplied.
@@ -50,8 +54,10 @@ logger = logging.getLogger(__name__)
 _MAX_EDITS = 50  # edits-per-read histogram: bins 0.._MAX_EDITS (last = overflow)
 _MAX_FRAGLEN = 1000  # fragment-length histogram: bins 0.._MAX_FRAGLEN (overflow)
 _RATE_BINS = 50  # per-read edit-rate histogram: _RATE_BINS equal bins over [0, 1]
+_MOTIF_WINDOW = 11  # bp window for the deaminase motif logo (odd; centre +/- 5)
 
 _COMPLEMENT = str.maketrans("ACGT", "TGCA")
+_BASE_IDX = {"A": 0, "C": 1, "G": 2, "T": 3}
 
 
 def _revcomp(seq: str) -> str:
@@ -90,6 +96,10 @@ class _Stats:
         self.edit_rate_hist = np.zeros(_RATE_BINS, dtype=np.int64)
         self.edit_rate_sum = 0.0
         self.edit_rate_n = 0
+        # Deaminase motif: per-position A/C/G/T counts over the window around
+        # each editing event (centre excluded, G-edits reverse-complemented).
+        self.motif_pwm = np.zeros((_MOTIF_WINDOW, 4), dtype=np.int64)
+        self.motif_events = 0
         # context -> [edits, opportunities]
         self.context: dict[str, list[int]] = defaultdict(lambda: [0, 0])
 
@@ -108,6 +118,8 @@ class _Stats:
         self.edit_rate_hist += other.edit_rate_hist
         self.edit_rate_sum += other.edit_rate_sum
         self.edit_rate_n += other.edit_rate_n
+        self.motif_pwm += other.motif_pwm
+        self.motif_events += other.motif_events
         for ctx, (e, o) in other.context.items():
             slot = self.context[ctx]
             slot[0] += e
@@ -204,6 +216,24 @@ def _process_chrom(
                     stats.total_edits += 1
                     slot[0] += 1
                     read_edits += 1
+
+                    # Deaminase motif: accumulate the reference window around the
+                    # edited base (centre excluded), unified to the C->T
+                    # orientation by reverse-complementing G-centred windows.
+                    half = _MOTIF_WINDOW // 2
+                    lo = rpos - half
+                    hi = lo + _MOTIF_WINDOW
+                    if lo >= 0 and hi <= ref_len:
+                        window = ref_seq[lo:hi]
+                        if ref_base == "G":
+                            window = _revcomp(window)
+                        for j, b in enumerate(window):
+                            if j == half:
+                                continue
+                            bi = _BASE_IDX.get(b)
+                            if bi is not None:
+                                stats.motif_pwm[j, bi] += 1
+                        stats.motif_events += 1
 
             stats.edits_per_read[min(read_edits, _MAX_EDITS)] += 1
 
@@ -365,6 +395,10 @@ def _build_metrics(
             "median": fraglen["median"],
             "n_pairs": fraglen["n"],
         },
+        "motif": {
+            "window": _MOTIF_WINDOW,
+            "n_events": stats.motif_events,
+        },
     }
     if tss_score is not None:
         metrics["tss_enrichment"] = {
@@ -441,6 +475,56 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
             f"TSS enrichment = {metrics['tss_enrichment']['score']:.2f}"
         )
 
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150)
+    plt.close(fig)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _motif_bits_df(pwm: np.ndarray):
+    """Convert a per-position A/C/G/T count PWM to information content (bits).
+
+    Returns a DataFrame indexed by position offset (centre = 0) with one column
+    per base, ready for :class:`logomaker.Logo`.
+    """
+    import pandas as pd
+
+    window = pwm.shape[0]
+    df = pd.DataFrame(pwm, columns=["A", "C", "G", "T"], dtype=float)
+    totals = df.sum(axis=1).replace(0, np.nan)
+    probs = df.div(totals, axis=0).fillna(0.0)
+    p = probs.to_numpy()
+    log_p = np.zeros_like(p)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        np.log2(p, where=(p > 0), out=log_p)
+    h = -np.sum(p * log_p, axis=1)
+    info = np.log2(p.shape[1]) - h  # log2(4) - entropy
+    bits = probs.multiply(info, axis=0)
+    bits.index = np.arange(window) - window // 2
+    bits.index.name = "position"
+    return bits
+
+
+def _motif_logo_base64(pwm: np.ndarray) -> str | None:
+    """Render the deaminase motif logo from a count PWM; base64 PNG, or None."""
+    if pwm.sum() == 0:
+        return None
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import logomaker  # noqa: E402
+    import matplotlib.pyplot as plt  # noqa: E402
+
+    bits = _motif_bits_df(pwm)
+    fig, ax = plt.subplots(figsize=(7, 2.4))
+    logo = logomaker.Logo(bits, ax=ax, baseline_width=0)
+    logo.style_spines(visible=False)
+    logo.style_spines(spines=["left", "bottom"], visible=True)
+    ax.set_xlabel("distance from edited base")
+    ax.set_ylabel("bits")
+    ax.set_title("Deaminase sequence motif")
     fig.tight_layout()
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150)
@@ -558,6 +642,7 @@ def _html_section(title: str, intro: str, section_key: str, data: dict) -> str:
 def _render_html(
     metrics: dict,
     img_b64: str | None,
+    motif_b64: str | None,
     bam_path: str,
     fasta_path: str,
     out_name: str,
@@ -585,6 +670,20 @@ def _render_html(
         f"<section><h2>Summary plots</h2>"
         f"<img alt='QC summary' src='data:image/png;base64,{img_b64}'></section>"
         if img_b64
+        else ""
+    )
+
+    motif_html = (
+        "<section><h2>Deaminase sequence motif</h2>"
+        "<p class='intro'>Sequence logo of the reference bases flanking edited "
+        "cytosines, built directly from the editing events in the BAM "
+        f"({_fmt(metrics['motif']['n_events'])} events, "
+        f"{metrics['motif']['window']}-bp window). The edited base itself is "
+        "excluded and G&rarr;A events are reverse-complemented into the "
+        "C&rarr;T orientation, so the logo shows the enzyme's flanking-sequence "
+        "preference (e.g. DddA's <code>TC</code> bias).</p>"
+        f"<img alt='Deaminase motif' src='data:image/png;base64,{motif_b64}'></section>"
+        if motif_b64
         else ""
     )
 
@@ -698,6 +797,7 @@ def _render_html(
         f"FASTA: <code>{fasta_path}</code></p>"
         f"<div class='cards'>{cards_html}</div>"
         f"{img_html}"
+        f"{motif_html}"
         + "".join(sections)
         + ctx_section
         + "<footer>Generated by deamtools qc</footer>"
@@ -796,10 +896,15 @@ def run_qc(
         json.dump(metrics, f, indent=2)
 
     img_b64 = _figure_base64(metrics, merged) if plot else None
+    motif_b64 = _motif_logo_base64(merged.motif_pwm) if plot else None
 
     logger.info(f"Writing {html_path}")
     with open(html_path, "w") as f:
-        f.write(_render_html(metrics, img_b64, bam_path, fasta_path, out_name))
+        f.write(
+            _render_html(
+                metrics, img_b64, motif_b64, bam_path, fasta_path, out_name
+            )
+        )
 
     logger.info("Done")
     return metrics

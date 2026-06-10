@@ -68,7 +68,7 @@ Merged:  [0, 800)              [1000, 1500)
 
 ## Enzyme sequence bias
 
-Deaminases have intrinsic flanking-sequence preferences (e.g. DddA strongly prefers `TC`). `qc` reports the per-trinucleotide edit fraction, and `plot_motif` renders the preference as a sequence logo. A strongly skewed profile indicates that footprinting/occupancy analyses should correct for enzyme bias.
+Deaminases have intrinsic flanking-sequence preferences (e.g. DddA strongly prefers `TC`). `qc` reports the per-trinucleotide edit fraction and renders a deaminase sequence-motif logo (the reference window around each editing event, centre excluded, `G→A` events reverse-complemented), both built directly from the BAM. A strongly skewed profile indicates that footprinting/occupancy analyses should correct for enzyme bias.
 
 ## Parallelism and output
 

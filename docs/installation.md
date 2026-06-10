@@ -8,7 +8,7 @@
 | samtools | any recent | indexing FASTA/BAM; used by `index` and `align` |
 | bwa | any recent | `index` and `align` only |
 
-`samtools` and `bwa` must be on your `PATH` for the `index` and `align` commands. The signal/QC commands (`bam2bw`, `bam2fragment`, `qc`, `plot_motif`) do not require them.
+`samtools` and `bwa` must be on your `PATH` for the `index` and `align` commands. The signal/QC commands (`bam2bw`, `bam2fragment`, `qc`) do not require them.
 
 ```bash
 # macOS (Homebrew)
@@ -60,7 +60,7 @@ Installed automatically by pip:
 | `numpy` | Per-base count arrays and signal convolution |
 | `pandas` | Tabular / BED data utilities |
 | `matplotlib` | Plotting (QC report, motif logo) |
-| `logomaker` | Sequence-logo rendering for `plot_motif` |
+| `logomaker` | Deaminase motif logo in the `qc` report |
 | `pysam` | BAM and FASTA I/O |
 | `pyBigWig` | BigWig reading and writing |
 | `MOODS-python` | Motif scanning |

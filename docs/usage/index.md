@@ -4,7 +4,7 @@ Build a deamination-aware reference index for a FASTA file. Run this once per re
 
 `index` produces two things next to the FASTA:
 
-1. the standard FASTA index (`<fasta>.fai`, via `samtools faidx`), used by `bam2bw`, `bam2fragment`, `qc`, and `plot_motif`; and
+1. the standard FASTA index (`<fasta>.fai`, via `samtools faidx`), used by `bam2bw`, `bam2fragment`, and `qc`; and
 2. a **doubly-converted BWA index** used by `align` to map heavily deaminated reads.
 
 ## Synopsis
@@ -25,7 +25,7 @@ deamtools index --fasta FILE [--out_dir DIR] [--out_name NAME] [--force]
 | `--log_level LEVEL` | `INFO`                    | Global flag (before the subcommand):`DEBUG`, `INFO`, `WARNING`, `ERROR`.                                       |
 
 :::{note}
-`--out_dir`/`--out_name` control only the deamtools-specific converted reference and its BWA index. The standard `<fasta>.fai` is **always** written next to the FASTA, because the pysam-based subcommands (`bam2bw`, `bam2fragment`, `qc`, `plot_motif`) require it there. By default the converted index is also written next to the FASTA — which is where `deamtools align` looks for it.
+`--out_dir`/`--out_name` control only the deamtools-specific converted reference and its BWA index. The standard `<fasta>.fai` is **always** written next to the FASTA, because the pysam-based subcommands (`bam2bw`, `bam2fragment`, `qc`) require it there. By default the converted index is also written next to the FASTA — which is where `deamtools align` looks for it.
 :::
 
 ## Requirements

@@ -107,25 +107,7 @@ run_qc(
 ) -> dict
 ```
 
-Compute QC metrics and write `<out_dir>/<out_name>.json` plus a self-contained HTML report. Returns the metrics dictionary. Supplying `tss_path` adds TSS enrichment.
-
-## `deamtools.stat.plot_motif`
-
-### `run_plot_motif`
-
-```python
-from deamtools.stat.plot_motif import run_plot_motif
-
-run_plot_motif(
-    bigwig_path: str,
-    fasta_path: str,
-    output_path: str,
-    bed_path: str | None = None,
-    window_size: int = 10,
-) -> pandas.DataFrame
-```
-
-Build a deaminase flanking-preference sequence logo from a count-mode BigWig, saving the plot to `output_path` and a sibling `.csv` of the bit-score matrix. Returns the bit-score matrix.
+Compute QC metrics and write `<out_dir>/<out_name>.json` plus a self-contained HTML report. The report includes the **deaminase sequence-motif logo**, built directly from the editing events in the BAM. Returns the metrics dictionary. Supplying `tss_path` adds TSS enrichment.
 
 ## `deamtools.utils`
 

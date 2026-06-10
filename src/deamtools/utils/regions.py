@@ -1,7 +1,7 @@
 """BED region parsing utilities.
 
 This module centralises the loader used by :mod:`deamtools.preprocessing.bam2bw`,
-:mod:`deamtools.stat.plot_motif`, and any other consumer that needs to read a
+:mod:`deamtools.qc`, and any other consumer that needs to read a
 UCSC BED file. See https://en.wikipedia.org/wiki/BED_(file_format).
 """
 

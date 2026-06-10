@@ -1,4 +1,4 @@
-"""Tests for deamtools.stat.qc."""
+"""Tests for deamtools.qc."""
 
 import json
 import os
@@ -209,6 +209,41 @@ class TestQC:
         # Only read1 contributes one fragment of length 10.
         assert m["fragment_length"]["n_pairs"] == 1
         assert m["fragment_length"]["median"] == pytest.approx(10)
+
+    def test_motif_logo_built_from_bam(self, tmp_path):
+        # Reference long enough for the 11-bp motif window around a central C.
+        ref = "A" * 20 + "C" + "A" * 20  # C at index 20
+        refpath = str(tmp_path / "mref.fa")
+        with open(refpath, "w") as f:
+            f.write(f">chr1\n{ref}\n")
+        pysam.faidx(refpath)
+
+        read_seq = "A" * 20 + "T" + "A" * 20  # C->T edit at index 20
+        hdr = {"HD": {"VN": "1.6"}, "SQ": [{"LN": len(ref), "SN": "chr1"}]}
+        a = pysam.AlignedSegment()
+        a.query_name = "r1"
+        a.query_sequence = read_seq
+        a.flag = 0
+        a.reference_id = 0
+        a.reference_start = 0
+        a.mapping_quality = 30
+        a.cigar = [(0, len(read_seq))]
+        a.query_qualities = pysam.qualitystring_to_array("I" * len(read_seq))
+        unsorted = str(tmp_path / "m.unsorted.bam")
+        bam = str(tmp_path / "m.bam")
+        with pysam.AlignmentFile(unsorted, "wb", header=hdr) as out:
+            out.write(a)
+        pysam.sort("-o", bam, unsorted)
+        pysam.index(bam)
+
+        out_dir = str(tmp_path)
+        m = run_qc(bam, refpath, out_dir, "mqc", min_mapq=0, min_baseq=0, plot=True)
+        assert m["motif"]["window"] == 11
+        assert m["motif"]["n_events"] == 1  # one C->T edit with a full window
+        html = open(os.path.join(out_dir, "mqc.html")).read()
+        assert "Deaminase sequence motif" in html
+        # Two embedded PNGs: the summary panel figure and the motif logo.
+        assert html.count("data:image/png;base64,") >= 2
 
     def test_json_and_html_written(self, tmp_path, fasta_file):
         read = _make_read("r1", "ACGTTGATCG", 0, is_paired=False)
