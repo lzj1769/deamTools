@@ -39,15 +39,61 @@ By default `align` looks for the converted index next to the FASTA (`<fasta>.dea
 
 ```
 FASTQ(s) ──[convert]──▶ bwa mem -C ──[restore]──▶ samtools sort ──▶ BAM (+ .bai)
+   R1: C→T                 |  three-letter        |  strip f/r prefix
+   R2: G→A                 |  alignment to the     |  restore original SEQ
+   + stash original (YS)   |  f/r converted ref    |  rebuild header
 ```
 
-Reads are converted on the fly to match the doubly-converted reference: read 1 is `C→T`-converted and read 2 (if paired) is `G→A`-converted. The original, unconverted read sequence is stashed in a `YS:Z:` tag and carried through `bwa mem -C`. After alignment, deamtools:
+The whole pipeline runs as a stream — reads are converted, mapped, and restored on the fly and piped straight into `samtools sort` — so no intermediate files are written.
 
-- restores the original SEQ from the `YS` tag (reverse-complemented for reverse-strand reads, trimmed for hard-clipped records) and drops the `YS` tag;
-- strips the `f`/`r` prefix from `RNAME`/`RNEXT` so chromosome names match the original reference;
-- rewrites the header `@SQ` lines from the original `.fai`.
+### Why the reads are converted
 
-The result is a standard BAM whose coordinates and sequences are in the original reference space, ready for `deamtools bam2bw`, `bam2fragment`, and `qc`.
+A deaminated read carries many `C→T` (or `G→A`) substitutions relative to the genome. Aligned directly, these look like dense mismatches and the read either maps with a poor score or fails to map, biasing against the most accessible (most edited) loci. DeamTools removes the bias by collapsing the alphabet — the same **three-letter (bisulfite-style) alignment** used by bwa-meth: if both the reads and the reference are `C→T`-converted, a genuine deamination event is no longer a mismatch, so editing density no longer affects mappability.
+
+### 1. On-the-fly read conversion
+
+Each read is converted to the three-letter space as it is streamed to the aligner:
+
+- **Read 1** is `C→T`-converted (every C and c → T/t).
+- **Read 2** (paired-end only) is `G→A`-converted — read 2 is sequenced from the complementary strand, where top-strand C→T deamination appears as G→A.
+
+The **original, unconverted sequence is preserved** in a `YS:Z:` SAM tag so it can be restored after mapping. This is done by appending the tag as a tab-separated comment on the FASTQ header line and running `bwa mem -C`, which copies the comment verbatim into the SAM record:
+
+```
+FASTQ record written to bwa:        Resulting (pre-restore) SAM fields:
+@read1  YS:Z:ACGTTCGA               SEQ  = ATGTTTGA        (C→T converted)
+ATGTTTGA                            tag  = YS:Z:ACGTTCGA   (original, via -C)
++
+IIIIIIII                            (base qualities are passed through unchanged)
+```
+
+For paired-end input the two FASTQs are read in lockstep and written **interleaved** (R1, R2, R1, R2, …); `bwa mem -p` then pairs consecutive records. Reads with no quality string (e.g. FASTA input) get a placeholder quality.
+
+### 2. Mapping to the doubly-converted reference
+
+`bwa mem -C -t <n> [-p] [-R <rg>] <converted_ref> -` reads the interleaved stream from stdin and maps against the reference built by [`deamtools index`](index.md), which contains, for every chromosome:
+
+- `f<chrom>` — the `C→T`-converted forward sequence, and
+- `r<chrom>` — the `G→A`-converted forward sequence.
+
+A `C→T`-converted read 1 matches the `f` contigs; a `G→A`-converted read 2 matches the `r` contigs. Crucially, **both mates of a fragment map to the same converted contig** (the `f`/`r` copy for the strand the fragment derives from), so BWA still flags them as a proper pair and computes insert sizes correctly.
+
+### 3. Restoring the alignments
+
+BWA's SAM stream is rewritten line by line back into the original reference space before it reaches `samtools sort`:
+
+- **Header.** BWA's `@SQ`/`@HD` lines describe the doubled `f`/`r` contigs, so they are dropped and replaced with a fresh `@HD VN:1.6 SO:coordinate` plus one `@SQ` per chromosome read from the original `<fasta>.fai`. Other header lines (`@PG`, `@RG`, `@CO`) are passed through.
+- **Reference names.** The leading `f`/`r` is stripped from `RNAME` and `RNEXT`, so `fchr1`/`rchr1` both become `chr1`.
+- **Read sequence.** `SEQ` (currently the converted read) is replaced with the original from the `YS:Z:` tag:
+  - if the read mapped to the reverse strand (flag `0x10`), the original is reverse-complemented to match BWA's orientation;
+  - for hard-clipped records (supplementary alignments), the original is trimmed by the leading/trailing `H` lengths in the CIGAR so it matches the stored `SEQ` length;
+  - the `YS` tag is then removed and all other tags (`NM`, `AS`, `MD`, …) are kept.
+
+The result is a standard BAM whose coordinates, chromosome names, and read sequences are all in the original reference space, ready for `deamtools bam2bw`, `bam2fragment`, and `qc`.
+
+### Streaming pipeline and threading
+
+`bwa mem` and `samtools sort` run as concurrent subprocesses connected by pipes. A dedicated **feeder thread** converts and writes reads into BWA's stdin while the main thread reads BWA's stdout, performs the restoration, and writes into `samtools sort`'s stdin; an exception in the feeder is propagated and the exit codes of both processes are checked. `--threads` is split between the two stages (`bwa mem` gets ⌈n/2⌉, `samtools sort` the rest). After sorting, the BAM is indexed with `samtools index`.
 
 ## Examples
 
