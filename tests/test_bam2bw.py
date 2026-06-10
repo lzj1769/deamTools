@@ -347,7 +347,8 @@ class TestRunBam2bw:
         bam = _write_bam(str(tmp_path / "t.bam"),
                          [_make_read("r1", "ATGTCGATCG", 0, 0)])
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file, output_path=out,
+        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
+                   out_dir=str(tmp_path), out_name="out",
                    chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0)
 
         assert os.path.exists(out)
@@ -361,7 +362,8 @@ class TestRunBam2bw:
         bam = _write_bam(str(tmp_path / "t.bam"),
                          [_make_read("r1", "ATGTCGATCG", 0, 0)])
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file, output_path=out,
+        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
+                   out_dir=str(tmp_path), out_name="out",
                    chrom_sizes_path=None, min_mapq=0, min_baseq=0)
         assert os.path.exists(out)
 
@@ -372,7 +374,8 @@ class TestRunBam2bw:
         bed = tmp_path / "r.bed"
         bed.write_text("chr1\t0\t3\n")
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file, output_path=out,
+        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
+                   out_dir=str(tmp_path), out_name="out",
                    chrom_sizes_path=chrom_sizes_file, bed_path=str(bed),
                    min_mapq=0, min_baseq=0)
 
@@ -384,7 +387,8 @@ class TestRunBam2bw:
         bam = _write_bam(str(tmp_path / "t.bam"),
                          [_make_read("r1", REF_SEQ, 0, 0)])
         out = str(tmp_path / "nested" / "dir" / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file, output_path=out,
+        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
+                   out_dir=str(tmp_path / "nested" / "dir"), out_name="out",
                    chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0)
         assert os.path.exists(out)
 
@@ -393,7 +397,8 @@ class TestRunBam2bw:
         bam = _write_bam(str(tmp_path / "t.bam"),
                          [_make_read("r1", REF_SEQ, 0, 0)])
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file, output_path=out,
+        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
+                   out_dir=str(tmp_path), out_name="out",
                    chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0)
 
         assert os.path.exists(out)
@@ -432,10 +437,10 @@ class TestRatioMode:
     def test_invalid_mode_raises(self, tmp_path, fasta_file):
         bam = _write_bam(str(tmp_path / "t.bam"),
                          [_make_read("r1", REF_SEQ, 0, 0)])
-        out = str(tmp_path / "out.bw")
         with pytest.raises(ValueError, match="mode"):
             run_bam2bw(
-                bam_path=bam, fasta_path=fasta_file, output_path=out,
+                bam_path=bam, fasta_path=fasta_file,
+                out_dir=str(tmp_path), out_name="out",
                 min_mapq=0, min_baseq=0, mode="bogus",
             )
 
@@ -518,7 +523,8 @@ class TestRatioMode:
         ]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
         out = str(tmp_path / "ratio.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file, output_path=out,
+        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
+                   out_dir=str(tmp_path), out_name="ratio",
                    chrom_sizes_path=chrom_sizes_file,
                    min_mapq=0, min_baseq=0, mode="ratio", min_coverage=0)
         with pyBigWig.open(out) as bw:

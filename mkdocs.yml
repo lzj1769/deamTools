@@ -39,6 +39,9 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Usage:
+      - index: usage/index.md
+      - align: usage/align.md
       - bam2bw: usage/bam2bw.md
+      - qc: usage/qc.md
   - Algorithm: algorithm.md
   - API Reference: api.md

@@ -244,7 +244,8 @@ def _signal_for_region(
 def run_bam2bw(
     bam_path: str,
     fasta_path: str,
-    output_path: str,
+    out_dir: str,
+    out_name: str,
     chrom_sizes_path: str | None = None,
     bed_path: str | None = None,
     min_mapq: int = 20,
@@ -252,7 +253,7 @@ def run_bam2bw(
     extend_size: int = 0,
     threads: int = 1,
     mode: str = "count",
-    min_coverage: int = 10,
+    min_coverage: int = 1,
 ) -> None:
     """Convert a BAM file to a per-base BigWig track of deamination signal.
 
@@ -276,9 +277,11 @@ def run_bam2bw(
     fasta_path : str
         Path to the indexed reference FASTA file
         (``samtools faidx``-style ``.fai`` required).
-    output_path : str
-        Output BigWig path (``.bw``). Parent directories are created if they
-        do not already exist.
+    out_dir : str
+        Output directory. Created if it does not already exist.
+    out_name : str
+        Base name (without extension) for the output; the BigWig is written to
+        ``<out_dir>/<out_name>.bw``.
     chrom_sizes_path : str, optional
         Tab-delimited chromosome-sizes file in UCSC format
         (``chrom`` ``<TAB>`` ``size`` per line). When ``None`` (default),
@@ -307,7 +310,7 @@ def run_bam2bw(
           ``edit_count / total_coverage``. Positions whose total ACGT
           coverage is strictly below ``min_coverage`` are written as
           ``0``.
-    min_coverage : int, default 10
+    min_coverage : int, default 1
         Coverage threshold for ratio mode (ignored when ``mode="count"``).
         Positions whose total ACGT coverage is strictly below this value
         report a ratio of ``0`` rather than a noisy small-denominator
@@ -316,7 +319,7 @@ def run_bam2bw(
     Returns
     -------
     None
-        The BigWig is written to ``output_path`` as a side effect. The
+        The BigWig is written to ``<out_dir>/<out_name>.bw`` as a side effect. The
         header lists every chromosome from ``chrom_sizes_path`` (or the BAM
         header); chromosomes with no signal are present in the header but
         carry no entries.
@@ -336,6 +339,8 @@ def run_bam2bw(
     """
     if mode not in ("count", "ratio"):
         raise ValueError(f"mode must be 'count' or 'ratio', got {mode!r}")
+
+    output_path = os.path.join(out_dir, f"{out_name}.bw")
 
     logger.info(f"Running bam2bw (mode={mode})")
     logger.info(f"BAM:   {bam_path}")
@@ -375,7 +380,7 @@ def run_bam2bw(
         f"Processing {len(regions)} region(s) with {threads} thread(s)"
     )
 
-    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
 
     results: dict[tuple[str, int, int], np.ndarray] = {}
     with ThreadPoolExecutor(max_workers=threads) as pool:

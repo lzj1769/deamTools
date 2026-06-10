@@ -140,17 +140,51 @@ def _process_sam(
 def run_align(
     fasta_path: str,
     fastq1: str,
-    output_bam: str,
+    out_dir: str,
+    out_name: str,
     fastq2: str | None = None,
     threads: int = 1,
     read_group: str | None = None,
+    index_path: str | None = None,
 ) -> None:
-    """Align deaminated reads to ``fasta_path`` and write a sorted, indexed BAM."""
-    converted_path = fasta_path + ".deamtools.c2t"
+    """Align deaminated reads and write a sorted, indexed BAM.
+
+    The BAM is written to ``<out_dir>/<out_name>.bam`` (with a companion
+    ``.bai`` index). The reference must already have been prepared with
+    :func:`deamtools.align.index.run_index`.
+
+    Parameters
+    ----------
+    fasta_path : str
+        Reference FASTA previously indexed with ``deamtools index``.
+    fastq1 : str
+        FASTQ for read 1 (or the only FASTQ for single-end input). Plain or
+        gzipped.
+    out_dir : str
+        Output directory. Created if it does not exist.
+    out_name : str
+        Base name (without extension) for the output; writes
+        ``<out_dir>/<out_name>.bam``.
+    fastq2 : str, optional
+        FASTQ for read 2 (paired-end). Omit for single-end alignment.
+    threads : int, default 1
+        Total threads, split between ``bwa mem`` and ``samtools sort``.
+    read_group : str, optional
+        Read-group line passed to ``bwa mem -R``.
+    index_path : str, optional
+        Path to the converted reference built by ``deamtools index``
+        (``<out_dir>/<out_name>.deamtools.c2t``). Use this when the index was
+        built with a custom ``--out_dir`` / ``--out_name``. Defaults to
+        ``<fasta>.deamtools.c2t`` (next to the FASTA).
+    """
+    converted_path = (
+        index_path if index_path is not None else fasta_path + ".deamtools.c2t"
+    )
     if not os.path.exists(converted_path + ".bwt"):
         raise FileNotFoundError(
-            f"BWA index not found at {converted_path}.bwt — "
-            f"run 'deamtools index --fasta {fasta_path}' first."
+            f"BWA index not found at {converted_path}.bwt — run "
+            f"'deamtools index --fasta {fasta_path}' first, and pass its "
+            f"--out_dir/--out_name location here via --index if it was custom."
         )
     if not os.path.exists(fasta_path + ".fai"):
         raise FileNotFoundError(
@@ -164,6 +198,7 @@ def run_align(
     _check_executable("bwa")
     _check_executable("samtools")
 
+    output_bam = os.path.join(out_dir, f"{out_name}.bam")
     paired = fastq2 is not None
     logger.info(f"Aligning {'paired' if paired else 'single'}-end reads")
     logger.info(f"  R1:    {fastq1}")
@@ -172,7 +207,7 @@ def run_align(
     logger.info(f"  Index: {converted_path}")
     logger.info(f"  Out:   {output_bam}")
 
-    os.makedirs(os.path.dirname(os.path.abspath(output_bam)), exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
 
     bwa_threads = max(1, (threads + 1) // 2)
     sort_threads = max(1, threads - bwa_threads)

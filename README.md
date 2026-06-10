@@ -38,7 +38,8 @@ samtools faidx hg38.fa
 deamtools bam2bw \
     --bam sample.sorted.bam \
     --fasta hg38.fa \
-    --output sample.bw
+    --out_dir results \
+    --out_name sample
 ```
 
 ## Commands
@@ -61,7 +62,7 @@ deamtools [--version] [--log_level LEVEL] <command>
 Convert a coordinate-sorted BAM file to a per-base BigWig track of C→T deamination counts.
 
 ```
-deamtools bam2bw --bam FILE --fasta FILE --output FILE [options]
+deamtools bam2bw --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 ```
 
 #### Required arguments
@@ -70,7 +71,8 @@ deamtools bam2bw --bam FILE --fasta FILE --output FILE [options]
 |---|---|
 | `--bam FILE` | Coordinate-sorted BAM file. Must be indexed (`.bai`). |
 | `--fasta FILE` | Reference FASTA file. Must be indexed with `samtools faidx` (`.fai`). |
-| `--output FILE` | Output BigWig path (`.bw`). Parent directories are created automatically. |
+| `--out_dir DIR` | Output directory. Created automatically if it does not exist. |
+| `--out_name NAME` | Base name (without extension) for the output. Writes `<out_dir>/<out_name>.bw`. |
 
 #### Optional arguments
 
@@ -92,7 +94,8 @@ Reads that are unmapped, duplicate, QC-failed, secondary, or supplementary are a
 deamtools bam2bw \
     --bam sample.bam \
     --fasta hg38.fa \
-    --output sample.bw
+    --out_dir results \
+    --out_name sample
 
 # Restrict to peaks, use stricter filters, run on 4 threads
 deamtools bam2bw \
@@ -102,21 +105,24 @@ deamtools bam2bw \
     --min_mapq 30 \
     --min_baseq 30 \
     --threads 4 \
-    --output sample_peaks.bw
+    --out_dir results \
+    --out_name sample_peaks
 
 # Extend each editing site by 50 bp in both directions
 deamtools bam2bw \
     --bam sample.bam \
     --fasta hg38.fa \
     --extend_size 50 \
-    --output sample_extended.bw
+    --out_dir results \
+    --out_name sample_extended
 
 # Provide an explicit chromosome sizes file and enable debug logging
 deamtools --log_level DEBUG bam2bw \
     --bam sample.bam \
     --fasta hg38.fa \
     --chrom_sizes hg38.chrom.sizes \
-    --output sample.bw
+    --out_dir results \
+    --out_name sample
 ```
 
 ## Running tests
