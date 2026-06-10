@@ -2,22 +2,23 @@
 
 ## Requirements
 
-| Requirement | Version |
-|---|---|
-| Python | ≥ 3.10 |
-| samtools | any recent version |
+| Requirement | Version | Needed for |
+|---|---|---|
+| Python | ≥ 3.10 | everything |
+| samtools | any recent | indexing FASTA/BAM; used by `index` and `align` |
+| bwa | any recent | `index` and `align` only |
 
-samtools is required to sort and index BAM files and to index FASTA files before running DeamTools. Install it via your package manager or from [htslib.org](https://www.htslib.org/).
+`samtools` and `bwa` must be on your `PATH` for the `index` and `align` commands. The signal/QC commands (`bam2bw`, `bam2fragment`, `qc`, `plot_motif`) do not require them.
 
 ```bash
-# macOS
-brew install samtools
+# macOS (Homebrew)
+brew install samtools bwa
 
 # Ubuntu / Debian
-sudo apt-get install samtools
+sudo apt-get install samtools bwa
 
 # conda
-conda install -c bioconda samtools
+conda install -c bioconda samtools bwa
 ```
 
 ## Install DeamTools
@@ -32,35 +33,36 @@ pip install .
 
 ### Development install
 
-If you plan to modify the source or run the test suite, install in editable mode with the `dev` extras:
+To modify the source or run the test suite, install in editable mode with the `dev` extras:
 
 ```bash
 pip install -e ".[dev]"
 ```
 
-This additionally installs: `pytest`, `pytest-cov`, `ruff`, `black`, `mypy`.
+This additionally installs `pytest`, `pytest-cov`, `ruff`, `black`, and `mypy`.
 
 ### Documentation extras
 
-To build the documentation locally:
+To build this documentation locally:
 
 ```bash
 pip install -e ".[docs]"
-mkdocs serve   # live-preview at http://127.0.0.1:8000
+mkdocs serve   # live preview at http://127.0.0.1:8000
 ```
 
 ## Python dependencies
 
-These are installed automatically by pip:
+Installed automatically by pip:
 
 | Package | Purpose |
 |---|---|
 | `numpy` | Per-base count arrays and signal convolution |
-| `pandas` | Tabular data utilities |
-| `matplotlib` | Plotting utilities |
-| `pysam` | BAM and FASTA file I/O |
-| `pyBigWig` | BigWig file writing |
-| `MOODS-python` | Motif scanning (future functionality) |
+| `pandas` | Tabular / BED data utilities |
+| `matplotlib` | Plotting (QC report, motif logo) |
+| `logomaker` | Sequence-logo rendering for `plot_motif` |
+| `pysam` | BAM and FASTA I/O |
+| `pyBigWig` | BigWig reading and writing |
+| `MOODS-python` | Motif scanning |
 
 ## Verify installation
 
@@ -78,4 +80,4 @@ cd deamTools
 pytest
 ```
 
-All 25 tests should pass. The test suite uses synthetic BAM and FASTA files created in a temporary directory — no external data files are required.
+The test suite uses synthetic BAM and FASTA fixtures created in a temporary directory, so no external data files — and no `bwa`/`samtools` — are required to run it.
