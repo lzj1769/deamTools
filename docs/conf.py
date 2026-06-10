@@ -51,3 +51,7 @@ html_theme_options = {
     "sticky_navigation": True,
     "prev_next_buttons_location": "bottom",
 }
+
+# Custom CSS (widens the content area; see _static/custom.css).
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]

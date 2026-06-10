@@ -1,0 +1,6 @@
+/* Widen the main content area.
+   sphinx_rtd_theme caps .wy-nav-content at 800px by default, which looks
+   narrow on wide screens. */
+.wy-nav-content {
+    max-width: 1100px;
+}
