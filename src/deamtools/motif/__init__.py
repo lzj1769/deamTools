@@ -1,6 +1,6 @@
 """Motif matching utilities for DeamTools."""
 
-from deamtools.motif.matching import (
+from deamtools.motif.match import (
     prepare_scanner,
     run_motif_matching,
     scan_sequence,

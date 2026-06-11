@@ -7,7 +7,7 @@ import sys
 
 from deamtools.align.align import run_align
 from deamtools.align.index import run_index
-from deamtools.motif.matching import run_motif_matching
+from deamtools.motif.match import run_motif_matching
 from deamtools.preprocessing.bam2bw import run_bam2bw
 from deamtools.preprocessing.bam2fragment import run_bam2fragment
 from deamtools.qc import run_qc

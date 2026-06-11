@@ -109,12 +109,12 @@ run_qc(
 
 Compute QC metrics and write `<out_dir>/<out_name>.json` plus a self-contained HTML report. The report includes the **deaminase sequence-motif logo**, built directly from the editing events in the BAM. Returns the metrics dictionary. Supplying `tss_path` adds TSS enrichment.
 
-## `deamtools.motif.matching`
+## `deamtools.motif.match`
 
 ### `run_motif_matching`
 
 ```python
-from deamtools.motif.matching import run_motif_matching
+from deamtools.motif.match import run_motif_matching
 
 run_motif_matching(
     fasta_path: str,
@@ -134,7 +134,7 @@ Scan the sequence of each BED region with MOODS and write motif matches to `outp
 ### `prepare_scanner` / `scan_sequence`
 
 ```python
-from deamtools.motif.matching import prepare_scanner, scan_sequence
+from deamtools.motif.match import prepare_scanner, scan_sequence
 
 scanner = prepare_scanner(motifs, pseudocounts=0.0001, p_value=5e-05)
 matches = scan_sequence(scanner, motifs, seq, chrom, offset=0)

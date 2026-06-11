@@ -1,4 +1,4 @@
-"""Tests for deamtools.motif.matching (MOODS scanning).
+"""Tests for deamtools.motif.match (MOODS scanning).
 
 These build motifs in memory (no JASPAR/pyjaspar needed); MOODS is a hard
 dependency of the package.
@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pysam
 
-from deamtools.motif.matching import (
+from deamtools.motif.match import (
     prepare_scanner,
     run_motif_matching,
     scan_sequence,
