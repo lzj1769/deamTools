@@ -62,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_bam2bw_parser(subparsers)
     _add_bam2fragment_parser(subparsers)
     _add_qc_parser(subparsers)
-    _add_matching_parser(subparsers)
+    _add_match_parser(subparsers)
 
     return parser
 
@@ -597,9 +597,9 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_run_qc)
 
 
-def _add_matching_parser(subparsers: argparse._SubParsersAction) -> None:
+def _add_match_parser(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
-        "matching",
+        "match",
         help=(
             "Scan genomic regions for transcription-factor motif matches and "
             "write a BED of binding sites."
@@ -616,10 +616,10 @@ def _add_matching_parser(subparsers: argparse._SubParsersAction) -> None:
         ),
         epilog=(
             "examples:\n"
-            "  deamtools matching --fasta hg38.fa --regions peaks.bed \\\n"
+            "  deamtools match --fasta hg38.fa --regions peaks.bed \\\n"
             "      --output mpbs.bed\n"
             "\n"
-            "  deamtools matching --fasta hg38.fa --regions peaks.bed \\\n"
+            "  deamtools match --fasta hg38.fa --regions peaks.bed \\\n"
             "      --collection CORE --tax_group vertebrates --p_value 1e-4 \\\n"
             "      --output mpbs.bed\n"
             "\n"
@@ -673,7 +673,7 @@ def _add_matching_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="FLOAT",
         help="Significance threshold for motif hits. Default: %(default)s.",
     )
-    parser.set_defaults(func=_run_matching)
+    parser.set_defaults(func=_run_match)
 
 
 def _run_index(args: argparse.Namespace) -> int:
@@ -753,7 +753,7 @@ def _run_qc(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_matching(args: argparse.Namespace) -> int:
+def _run_match(args: argparse.Namespace) -> int:
     _log_invocation(args)
     run_motif_matching(
         fasta_path=args.fasta,

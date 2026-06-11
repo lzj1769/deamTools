@@ -1,11 +1,11 @@
-# matching
+# match
 
 Scan the reference sequence of a set of genomic regions (e.g. accessible peaks) for transcription-factor motif occurrences and write them as a BED of motif-predicted binding sites (MPBSs). These sites are the anchors for downstream footprinting and occupancy analysis.
 
 ## Synopsis
 
 ```
-deamtools matching --fasta FILE --regions FILE --output FILE [options]
+deamtools match --fasta FILE --regions FILE --output FILE [options]
 ```
 
 ## Required inputs
@@ -56,13 +56,13 @@ chrom    start    end    motif    score    strand
 
 ```bash
 # Scan peaks against JASPAR CORE vertebrate motifs
-deamtools matching \
+deamtools match \
     --fasta hg38.fa \
     --regions peaks.bed \
     --output mpbs.bed
 
 # Stricter threshold, explicit collection / taxonomic group
-deamtools matching \
+deamtools match \
     --fasta hg38.fa \
     --regions peaks.bed \
     --collection CORE \
