@@ -24,7 +24,7 @@ deamtools align --fasta FILE --read1 FILE --out_dir DIR --out_name NAME [options
 | `--read2 FILE` | *(single-end)* | FASTQ for read 2. Provide it for paired-end alignment; omit for single-end. |
 | `--index FILE` | *(next to the FASTA)* | Path to the converted reference built by `deamtools index` (`<out_dir>/<out_name>.deamtools.c2t`). Use this when the index was built with a custom `--out_dir`/`--out_name`. |
 | `--read_group STR` | *(none)* | Read-group line passed to `bwa mem -R`, e.g. `'@RG\tID:s1\tSM:sample1\tLB:lib1\tPL:ILLUMINA'`. |
-| `--threads INT` | `1` | Total threads, split between `bwa mem` and `samtools sort`. |
+| `--threads INT` | `1` | Threads used by `bwa mem` and (separately) `samtools sort`. |
 | `--log_level LEVEL` | `INFO` | Global flag (before the subcommand): `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 
 :::{note}
@@ -38,13 +38,15 @@ By default `align` looks for the converted index next to the FASTA (`<fasta>.dea
 ## How it works
 
 ```
-FASTQ(s) ──[convert]──▶ bwa mem -C ──[restore]──▶ samtools sort ──▶ BAM (+ .bai)
+FASTQ(s) ──[convert]──▶ bwa mem -C ──[restore]──▶ <out_name>.sam
    R1: C→T                 |  three-letter        |  strip f/r prefix
    R2: G→A                 |  alignment to the     |  restore original SEQ
    + stash original (YS)   |  f/r converted ref    |  rebuild header
+                                                           │
+                                          samtools sort ───┴──▶ <out_name>.bam (+ .bai)
 ```
 
-The whole pipeline runs as a stream — reads are converted, mapped, and restored on the fly and piped straight into `samtools sort` — so no intermediate files are written.
+Reads are converted, mapped, and restored on the fly, and the restored alignments are written to `<out_dir>/<out_name>.sam`; that SAM is then converted to a coordinate-sorted, indexed BAM with `samtools sort`. (The intermediate `.sam` is left in place.)
 
 ### Why the reads are converted
 
@@ -91,9 +93,9 @@ BWA's SAM stream is rewritten line by line back into the original reference spac
 
 The result is a standard BAM whose coordinates, chromosome names, and read sequences are all in the original reference space, ready for `deamtools bam2bw`, `bam2fragment`, and `qc`.
 
-### Streaming pipeline and threading
+### Pipeline and threading
 
-`bwa mem` and `samtools sort` run as concurrent subprocesses connected by pipes. A dedicated **feeder thread** converts and writes reads into BWA's stdin while the main thread reads BWA's stdout, performs the restoration, and writes into `samtools sort`'s stdin; an exception in the feeder is propagated and the exit codes of both processes are checked. `--threads` is split between the two stages (`bwa mem` gets ⌈n/2⌉, `samtools sort` the rest). After sorting, the BAM is indexed with `samtools index`.
+`bwa mem` runs as a subprocess: a dedicated **feeder thread** converts and writes reads into BWA's stdin while the main thread reads BWA's stdout, performs the restoration, and writes the result to `<out_name>.sam`; an exception in the feeder is propagated and BWA's exit code is checked. The SAM is then converted to a coordinate-sorted BAM with `samtools sort` and indexed with `samtools index`. Both `bwa mem` and `samtools sort` use the full `--threads` count (they run one after the other).
 
 ## Examples
 
@@ -127,6 +129,7 @@ deamtools align \
 
 ## Notes
 
-- `--threads` is divided between `bwa mem` and `samtools sort` (roughly half each).
+- `bwa mem` and `samtools sort` each use the full `--threads` count (they run one after the other, not concurrently).
+- The intermediate `<out_name>.sam` is kept alongside the BAM; delete it once you have the sorted BAM if you don't need it.
 - Paired FASTQs must contain the same number of reads in the same order; a length mismatch raises an error.
 - The output BAM is coordinate-sorted and indexed, so it is immediately usable by the rest of the toolkit.

@@ -2,13 +2,14 @@
 
 The pipeline is:
 
-  FASTQ(s) --[convert]--> bwa mem -C --[post-process]--> samtools sort --> BAM
+  FASTQ(s) --[convert]--> bwa mem -C --[post-process]--> <out_name>.sam
+      --[samtools sort]--> coordinate-sorted <out_name>.bam (+ .bai)
 
 Read 1 is converted C->T and read 2 (if paired) is converted G->A on the fly,
 with the original read sequence stashed in a ``YS:Z:`` tag carried through
-``bwa mem -C``. After alignment the original SEQ is restored from ``YS`` and
-the ``f``/``r`` prefix is stripped from RNAME/RNEXT to recover original
-chromosome names.
+``bwa mem -C``. The restored SAM (original SEQ recovered from ``YS`` and the
+``f``/``r`` prefix stripped from RNAME/RNEXT) is written to ``<out_name>.sam``,
+which is then converted to a coordinate-sorted, indexed BAM with samtools.
 """
 
 from __future__ import annotations
@@ -199,6 +200,7 @@ def run_align(
     _check_executable("samtools")
 
     output_bam = os.path.join(out_dir, f"{out_name}.bam")
+    sam_path = os.path.join(out_dir, f"{out_name}.sam")
     paired = read2 is not None
     logger.info(f"Aligning {'paired' if paired else 'single'}-end reads")
     logger.info(f"  R1:    {read1}")
@@ -209,29 +211,19 @@ def run_align(
 
     os.makedirs(out_dir, exist_ok=True)
 
-    bwa_threads = max(1, (threads + 1) // 2)
-    sort_threads = max(1, threads - bwa_threads)
-
-    bwa_cmd = ["bwa", "mem", "-C", "-t", str(bwa_threads)]
+    bwa_cmd = ["bwa", "mem", "-C", "-t", str(threads)]
     if paired:
         bwa_cmd += ["-p"]
     if read_group is not None:
         bwa_cmd += ["-R", read_group]
     bwa_cmd += [converted_path, "-"]
-    sort_cmd = ["samtools", "sort", "-@", str(sort_threads), "-o", output_bam, "-"]
 
-    logger.info(f"  bwa mem ({bwa_threads}t) | post-process | samtools sort ({sort_threads}t)")
-
+    # Step 1: bwa mem -> restore original sequences/names -> <out_name>.sam.
+    logger.info(f"bwa mem ({threads}t) -> {sam_path}")
     bwa_proc = subprocess.Popen(
         bwa_cmd,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        text=True,
-        bufsize=1 << 20,
-    )
-    sort_proc = subprocess.Popen(
-        sort_cmd,
-        stdin=subprocess.PIPE,
         text=True,
         bufsize=1 << 20,
     )
@@ -248,22 +240,24 @@ def run_align(
     feeder.start()
 
     try:
-        _emit_clean_header(fasta_path, sort_proc.stdin)
-        _process_sam(bwa_proc.stdout, sort_proc.stdin)
+        with open(sam_path, "w") as sam:
+            _emit_clean_header(fasta_path, sam)
+            _process_sam(bwa_proc.stdout, sam)
     finally:
-        sort_proc.stdin.close()
-    feeder.join()
+        feeder.join()
 
     bwa_rc = bwa_proc.wait()
-    sort_rc = sort_proc.wait()
-
     if feeder_exc:
         raise feeder_exc[0]
     if bwa_rc != 0:
         raise subprocess.CalledProcessError(bwa_rc, bwa_cmd)
-    if sort_rc != 0:
-        raise subprocess.CalledProcessError(sort_rc, sort_cmd)
 
+    # Step 2: convert the SAM to a coordinate-sorted, indexed BAM.
+    logger.info(f"samtools sort ({threads}t) {sam_path} -> {output_bam}")
+    subprocess.run(
+        ["samtools", "sort", "-@", str(threads), "-o", output_bam, sam_path],
+        check=True,
+    )
     logger.info("samtools index ...")
     subprocess.run(["samtools", "index", output_bam], check=True)
     logger.info("Done")
