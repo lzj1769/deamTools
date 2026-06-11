@@ -358,6 +358,34 @@ class TestRunBam2bw:
             # No event at pos 0
             assert bw.stats("chr1", 0, 1, type="mean")[0] is None
 
+    def test_normalize_count_scales_by_total(self, tmp_path, fasta_file, chrom_sizes_file):
+        # Read with C->T at pos 1 and pos 4 -> 2 edits genome-wide.
+        bam = _write_bam(str(tmp_path / "t.bam"),
+                         [_make_read("r1", "ATGTTGATCG", 0, 0)])
+        out = str(tmp_path / "out.bw")
+        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
+                   out_dir=str(tmp_path), out_name="out",
+                   chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0,
+                   normalize=True, scale_factor=10.0)
+
+        with pyBigWig.open(out) as bw:
+            # raw count 1 -> 1 * scale_factor / total = 1 * 10 / 2 = 5.0
+            assert bw.stats("chr1", 1, 2, type="mean")[0] == pytest.approx(5.0)
+            assert bw.stats("chr1", 4, 5, type="mean")[0] == pytest.approx(5.0)
+
+    def test_normalize_ignored_in_ratio_mode(self, tmp_path, fasta_file, chrom_sizes_file):
+        # 1 edit (T) + 1 ref C at pos 1 -> ratio 0.5; --normalize must not change it.
+        reads = [_make_read("r1", "ATGTCGATCG", 0, 0),
+                 _make_read("r2", REF_SEQ, 0, 0)]
+        bam = _write_bam(str(tmp_path / "t.bam"), reads)
+        out = str(tmp_path / "out.bw")
+        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
+                   out_dir=str(tmp_path), out_name="out",
+                   chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0,
+                   mode="ratio", min_coverage=0, normalize=True, scale_factor=10.0)
+        with pyBigWig.open(out) as bw:
+            assert bw.stats("chr1", 1, 2, type="mean")[0] == pytest.approx(0.5)
+
     def test_infer_chrom_sizes_from_bam(self, tmp_path, fasta_file):
         bam = _write_bam(str(tmp_path / "t.bam"),
                          [_make_read("r1", "ATGTCGATCG", 0, 0)])

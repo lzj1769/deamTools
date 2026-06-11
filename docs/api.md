@@ -60,10 +60,12 @@ run_bam2bw(
     threads: int = 1,
     mode: str = "count",
     min_coverage: int = 10,
+    normalize: bool = False,
+    scale_factor: float = 1_000_000,
 ) -> None
 ```
 
-Write a per-base BigWig of deamination signal to `<out_dir>/<out_name>.bw`. `mode="count"` writes raw edit counts (strand-agnostic `C→T` or `G→A`) and honours `extend_size`; `mode="ratio"` writes `edits / total_ACGT_coverage`, masking positions below `min_coverage` to 0.
+Write a per-base BigWig of deamination signal to `<out_dir>/<out_name>.bw`. `mode="count"` writes raw edit counts (strand-agnostic `C→T` or `G→A`) and honours `extend_size`; `mode="ratio"` writes `edits / total_ACGT_coverage`, masking positions below `min_coverage` to 0. In count mode, `normalize=True` scales every value by `scale_factor / total` so the track sums to `scale_factor` (reads/counts-per-million); ignored in ratio mode.
 
 ## `deamtools.preprocessing.bam2fragment`
 

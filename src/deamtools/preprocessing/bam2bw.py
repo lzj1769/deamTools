@@ -254,6 +254,8 @@ def run_bam2bw(
     threads: int = 1,
     mode: str = "count",
     min_coverage: int = 1,
+    normalize: bool = False,
+    scale_factor: float = 1_000_000.0,
 ) -> None:
     """Convert a BAM file to a per-base BigWig track of deamination signal.
 
@@ -315,6 +317,14 @@ def run_bam2bw(
         Positions whose total ACGT coverage is strictly below this value
         report a ratio of ``0`` rather than a noisy small-denominator
         fraction.
+    normalize : bool, default False
+        Apply reads-per-million-style normalization to the **count**-mode
+        signal: every value is scaled by ``scale_factor / total``, where
+        ``total`` is the genome-wide sum of the count signal. The written
+        track therefore sums to ``scale_factor`` (with ``extend_size=0`` this
+        is counts-per-``scale_factor`` edits). Ignored in ratio mode.
+    scale_factor : float, default 1_000_000
+        Target total for ``--normalize`` (1e6 gives reads/counts-per-million).
 
     Returns
     -------
@@ -404,10 +414,19 @@ def run_bam2bw(
             chrom, start, end, signal = future.result()
             results[(chrom, start, end)] = signal
 
+    norm_factor = 1.0
     if mode == "count":
         total = int(sum(int(s.sum()) for s in results.values()))
         logger.info(f"  total deamination event(s): {total}")
+        if normalize:
+            norm_factor = scale_factor / total if total > 0 else 0.0
+            logger.info(
+                f"  normalizing by {total} -> scale_factor {scale_factor:g} "
+                f"(factor {norm_factor:g})"
+            )
     else:
+        if normalize:
+            logger.warning("  --normalize is ignored in ratio mode")
         nonzero = int(sum(int(np.count_nonzero(s)) for s in results.values()))
         logger.info(f"  total position(s) with non-zero ratio: {nonzero}")
 
@@ -419,10 +438,13 @@ def run_bam2bw(
             nonzero_idx = np.nonzero(signal)[0]
             if len(nonzero_idx) == 0:
                 continue
+            values = signal[nonzero_idx].astype(float)
+            if norm_factor != 1.0:
+                values = values * norm_factor
             bw.addEntries(
                 chrom,
                 (nonzero_idx + start).tolist(),
-                values=signal[nonzero_idx].astype(float).tolist(),
+                values=values.tolist(),
                 span=1,
             )
 

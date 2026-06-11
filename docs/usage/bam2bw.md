@@ -31,6 +31,8 @@ deamtools bam2bw --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 | Argument | Default | Description |
 |---|---|---|
 | `--extend_size INT` | `0` | Symmetrically extend each detected deamination site by INT base pairs in both directions before writing to the BigWig. A value of 50 means each event at position *p* contributes signal to [*p*−50, *p*+50]. Implemented as a box-kernel convolution, so the signal at a position equals the number of events within `extend_size` bases. |
+| `--normalize` | *(off)* | In count mode (the default), scale every value by `scale_factor / (genome-wide total count)` so the written track sums to `--scale_factor` — reads/counts-per-million-style normalization that makes samples comparable regardless of editing depth. With `--extend_size 0` this is counts per `scale_factor` edits. Ignored in `--mode ratio`. |
+| `--scale_factor FLOAT` | `1000000` | Target total for `--normalize` (1e6 gives per-million values). |
 
 ### Quality filters
 

@@ -345,6 +345,25 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
             "Ignored in --mode count. Default: %(default)s."
         ),
     )
+    parser.add_argument(
+        "--normalize",
+        action="store_true",
+        help=(
+            "Apply reads-per-million-style normalization in --mode count: scale "
+            "every value by scale_factor / (genome-wide total count), so the "
+            "track sums to --scale_factor. Ignored in --mode ratio."
+        ),
+    )
+    parser.add_argument(
+        "--scale_factor",
+        type=float,
+        default=1_000_000.0,
+        metavar="FLOAT",
+        help=(
+            "Target total for --normalize (1e6 = per-million). "
+            "Default: %(default)s."
+        ),
+    )
 
     # Quality filters
     parser.add_argument(
@@ -738,6 +757,8 @@ def _run_bam2bw(args: argparse.Namespace) -> int:
         threads=args.threads,
         mode=args.mode,
         min_coverage=args.min_coverage,
+        normalize=args.normalize,
+        scale_factor=args.scale_factor,
     )
     return 0
 
