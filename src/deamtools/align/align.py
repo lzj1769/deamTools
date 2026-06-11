@@ -58,17 +58,17 @@ def _write_converted(out: io.TextIOBase, entry, table) -> None:
 
 
 def _feed_converted(
-    fastq1: str,
-    fastq2: str | None,
+    read1: str,
+    read2: str | None,
     out: io.TextIOBase,
 ) -> None:
     try:
-        if fastq2 is None:
-            with pysam.FastxFile(fastq1) as fq:
+        if read2 is None:
+            with pysam.FastxFile(read1) as fq:
                 for entry in fq:
                     _write_converted(out, entry, CT_TABLE)
         else:
-            with pysam.FastxFile(fastq1) as fq1, pysam.FastxFile(fastq2) as fq2:
+            with pysam.FastxFile(read1) as fq1, pysam.FastxFile(read2) as fq2:
                 for r1, r2 in zip(fq1, fq2, strict=True):
                     _write_converted(out, r1, CT_TABLE)
                     _write_converted(out, r2, GA_TABLE)
@@ -139,10 +139,10 @@ def _process_sam(
 
 def run_align(
     fasta_path: str,
-    fastq1: str,
+    read1: str,
     out_dir: str,
     out_name: str,
-    fastq2: str | None = None,
+    read2: str | None = None,
     threads: int = 1,
     read_group: str | None = None,
     index_path: str | None = None,
@@ -157,7 +157,7 @@ def run_align(
     ----------
     fasta_path : str
         Reference FASTA previously indexed with ``deamtools index``.
-    fastq1 : str
+    read1 : str
         FASTQ for read 1 (or the only FASTQ for single-end input). Plain or
         gzipped.
     out_dir : str
@@ -165,7 +165,7 @@ def run_align(
     out_name : str
         Base name (without extension) for the output; writes
         ``<out_dir>/<out_name>.bam``.
-    fastq2 : str, optional
+    read2 : str, optional
         FASTQ for read 2 (paired-end). Omit for single-end alignment.
     threads : int, default 1
         Total threads, split between ``bwa mem`` and ``samtools sort``.
@@ -191,19 +191,19 @@ def run_align(
             f"FASTA index not found at {fasta_path}.fai — "
             f"run 'deamtools index --fasta {fasta_path}' first."
         )
-    if not os.path.exists(fastq1):
-        raise FileNotFoundError(f"FASTQ not found: {fastq1}")
-    if fastq2 is not None and not os.path.exists(fastq2):
-        raise FileNotFoundError(f"FASTQ not found: {fastq2}")
+    if not os.path.exists(read1):
+        raise FileNotFoundError(f"FASTQ not found: {read1}")
+    if read2 is not None and not os.path.exists(read2):
+        raise FileNotFoundError(f"FASTQ not found: {read2}")
     _check_executable("bwa")
     _check_executable("samtools")
 
     output_bam = os.path.join(out_dir, f"{out_name}.bam")
-    paired = fastq2 is not None
+    paired = read2 is not None
     logger.info(f"Aligning {'paired' if paired else 'single'}-end reads")
-    logger.info(f"  R1:    {fastq1}")
+    logger.info(f"  R1:    {read1}")
     if paired:
-        logger.info(f"  R2:    {fastq2}")
+        logger.info(f"  R2:    {read2}")
     logger.info(f"  Index: {converted_path}")
     logger.info(f"  Out:   {output_bam}")
 
@@ -240,7 +240,7 @@ def run_align(
 
     def _feed():
         try:
-            _feed_converted(fastq1, fastq2, bwa_proc.stdin)
+            _feed_converted(read1, read2, bwa_proc.stdin)
         except BaseException as e:
             feeder_exc.append(e)
 

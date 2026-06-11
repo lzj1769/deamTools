@@ -90,7 +90,7 @@ deamtools index --fasta genome.fa
 
 # 2. Align deaminated reads -> results/sample.bam (+ .bai)
 deamtools align --fasta genome.fa \
-    --fastq1 sample_R1.fq.gz --fastq2 sample_R2.fq.gz \
+    --read1 sample_R1.fq.gz --read2 sample_R2.fq.gz \
     --out_dir results --out_name sample
 
 # 3. Per-base editing track -> results/sample.bw

@@ -28,10 +28,10 @@ from deamtools.align.align import run_align
 
 run_align(
     fasta_path: str,
-    fastq1: str,
+    read1: str,
     out_dir: str,
     out_name: str,
-    fastq2: str | None = None,
+    read2: str | None = None,
     threads: int = 1,
     read_group: str | None = None,
     index_path: str | None = None,

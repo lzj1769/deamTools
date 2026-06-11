@@ -150,11 +150,11 @@ def _add_align_parser(subparsers: argparse._SubParsersAction) -> None:
         epilog=(
             "examples:\n"
             "  # Paired-end\n"
-            "  deamtools align --fasta hg38.fa --fastq1 r1.fq.gz --fastq2 r2.fq.gz \\\n"
+            "  deamtools align --fasta hg38.fa --read1 r1.fq.gz --read2 r2.fq.gz \\\n"
             "      --out_dir results --out_name sample --threads 8\n"
             "\n"
             "  # Single-end with a read group\n"
-            "  deamtools align --fasta hg38.fa --fastq1 reads.fq.gz \\\n"
+            "  deamtools align --fasta hg38.fa --read1 reads.fq.gz \\\n"
             "      --read_group '@RG\\tID:s1\\tSM:sample1\\tLB:lib1\\tPL:ILLUMINA' \\\n"
             "      --out_dir results --out_name sample\n"
             "\n"
@@ -180,13 +180,13 @@ def _add_align_parser(subparsers: argparse._SubParsersAction) -> None:
         ),
     )
     parser.add_argument(
-        "--fastq1",
+        "--read1",
         required=True,
         metavar="FILE",
         help="FASTQ for read 1 (or for single-end reads). Plain or gzipped.",
     )
     parser.add_argument(
-        "--fastq2",
+        "--read2",
         metavar="FILE",
         help="FASTQ for read 2 (paired-end). Omit for single-end alignment.",
     )
@@ -691,8 +691,8 @@ def _run_align(args: argparse.Namespace) -> int:
     _log_invocation(args)
     run_align(
         fasta_path=args.fasta,
-        fastq1=args.fastq1,
-        fastq2=args.fastq2,
+        read1=args.read1,
+        read2=args.read2,
         out_dir=args.out_dir,
         out_name=args.out_name,
         threads=args.threads,

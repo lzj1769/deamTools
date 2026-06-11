@@ -5,7 +5,7 @@ Align deaminated sequencing reads (single- or paired-end) to a reference prepare
 ## Synopsis
 
 ```
-deamtools align --fasta FILE --fastq1 FILE --out_dir DIR --out_name NAME [options]
+deamtools align --fasta FILE --read1 FILE --out_dir DIR --out_name NAME [options]
 ```
 
 ## Required inputs
@@ -13,7 +13,7 @@ deamtools align --fasta FILE --fastq1 FILE --out_dir DIR --out_name NAME [option
 | Argument | Description |
 |---|---|
 | `--fasta FILE` | Reference FASTA. Must already have been indexed with `deamtools index` (i.e. `<fasta>.fai` and `<fasta>.deamtools.c2t.*` exist). |
-| `--fastq1 FILE` | FASTQ for read 1, or the only FASTQ for single-end input. Plain or gzipped. |
+| `--read1 FILE` | FASTQ for read 1, or the only FASTQ for single-end input. Plain or gzipped. |
 | `--out_dir DIR` | Output directory. Created automatically if it does not exist. |
 | `--out_name NAME` | Base name (without extension) for the output. Writes a sorted, indexed `<out_dir>/<out_name>.bam` (and `.bam.bai`). |
 
@@ -21,7 +21,7 @@ deamtools align --fasta FILE --fastq1 FILE --out_dir DIR --out_name NAME [option
 
 | Argument | Default | Description |
 |---|---|---|
-| `--fastq2 FILE` | *(single-end)* | FASTQ for read 2. Provide it for paired-end alignment; omit for single-end. |
+| `--read2 FILE` | *(single-end)* | FASTQ for read 2. Provide it for paired-end alignment; omit for single-end. |
 | `--index FILE` | *(next to the FASTA)* | Path to the converted reference built by `deamtools index` (`<out_dir>/<out_name>.deamtools.c2t`). Use this when the index was built with a custom `--out_dir`/`--out_name`. |
 | `--read_group STR` | *(none)* | Read-group line passed to `bwa mem -R`, e.g. `'@RG\tID:s1\tSM:sample1\tLB:lib1\tPL:ILLUMINA'`. |
 | `--threads INT` | `1` | Total threads, split between `bwa mem` and `samtools sort`. |
@@ -101,8 +101,8 @@ The result is a standard BAM whose coordinates, chromosome names, and read seque
 # Paired-end, 8 threads
 deamtools align \
     --fasta hg38.fa \
-    --fastq1 sample_R1.fq.gz \
-    --fastq2 sample_R2.fq.gz \
+    --read1 sample_R1.fq.gz \
+    --read2 sample_R2.fq.gz \
     --threads 8 \
     --out_dir results \
     --out_name sample
@@ -111,7 +111,7 @@ deamtools align \
 # Single-end with a read group
 deamtools align \
     --fasta hg38.fa \
-    --fastq1 sample.fq.gz \
+    --read1 sample.fq.gz \
     --read_group '@RG\tID:s1\tSM:sample1\tLB:lib1\tPL:ILLUMINA' \
     --out_dir results \
     --out_name sample
@@ -121,7 +121,7 @@ deamtools index --fasta hg38.fa --out_dir indexes --out_name hg38
 deamtools align \
     --fasta hg38.fa \
     --index indexes/hg38.deamtools.c2t \
-    --fastq1 sample_R1.fq.gz --fastq2 sample_R2.fq.gz \
+    --read1 sample_R1.fq.gz --read2 sample_R2.fq.gz \
     --out_dir results --out_name sample
 ```
 
