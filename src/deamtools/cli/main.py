@@ -617,11 +617,11 @@ def _add_match_parser(subparsers: argparse._SubParsersAction) -> None:
         epilog=(
             "examples:\n"
             "  deamtools match --fasta hg38.fa --regions peaks.bed \\\n"
-            "      --output mpbs.bed\n"
+            "      --out_dir results --out_name mpbs\n"
             "\n"
             "  deamtools match --fasta hg38.fa --regions peaks.bed \\\n"
             "      --collection CORE --tax_group vertebrates --p_value 1e-4 \\\n"
-            "      --output mpbs.bed\n"
+            "      --out_dir results --out_name mpbs\n"
             "\n"
             "notes:\n"
             "  * The FASTA must be indexed with 'samtools faidx' (.fai).\n"
@@ -643,10 +643,19 @@ def _add_match_parser(subparsers: argparse._SubParsersAction) -> None:
         help="BED file of regions to scan (overlapping intervals are merged).",
     )
     parser.add_argument(
-        "--output",
+        "--out_dir",
         required=True,
-        metavar="FILE",
-        help="Output BED path. Parent directories are created automatically.",
+        metavar="DIR",
+        help="Output directory. Created if it does not exist.",
+    )
+    parser.add_argument(
+        "--out_name",
+        required=True,
+        metavar="NAME",
+        help=(
+            "Base name (without extension) for the output; writes "
+            "<out_dir>/<out_name>.bed."
+        ),
     )
     parser.add_argument(
         "--jaspar_release",
@@ -758,7 +767,8 @@ def _run_match(args: argparse.Namespace) -> int:
     run_motif_matching(
         fasta_path=args.fasta,
         bed_path=args.regions,
-        output_path=args.output,
+        out_dir=args.out_dir,
+        out_name=args.out_name,
         release=args.jaspar_release,
         collection=args.collection,
         tax_group=args.tax_group,

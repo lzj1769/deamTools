@@ -119,7 +119,8 @@ from deamtools.motif.match import run_motif_matching
 run_motif_matching(
     fasta_path: str,
     bed_path: str,
-    output_path: str,
+    out_dir: str,
+    out_name: str,
     motifs: list | None = None,
     release: str = "JASPAR2024",
     collection: str = "CORE",
@@ -129,7 +130,7 @@ run_motif_matching(
 ) -> None
 ```
 
-Scan the sequence of each BED region with MOODS and write motif matches to `output_path` as 6-column BED (`chrom, start, end, motif, score, strand`). Motifs are fetched from JASPAR (needs `pyjaspar`) unless `motifs` is passed explicitly.
+Scan the sequence of each BED region with MOODS and write motif matches to `<out_dir>/<out_name>.bed` as 6-column BED (`chrom, start, end, motif, score, strand`). Motifs are fetched from JASPAR (needs `pyjaspar`) unless `motifs` is passed explicitly.
 
 ### `prepare_scanner` / `scan_sequence`
 

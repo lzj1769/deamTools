@@ -180,7 +180,8 @@ def scan_sequence(
 def run_motif_matching(
     fasta_path: str,
     bed_path: str,
-    output_path: str,
+    out_dir: str,
+    out_name: str,
     motifs: list | None = None,
     release: str = "JASPAR2024",
     collection: str = "CORE",
@@ -192,7 +193,7 @@ def run_motif_matching(
 
     For each interval in ``bed_path`` the reference sequence is read from
     ``fasta_path`` and scanned with MOODS; every hit above the ``p_value``
-    threshold is written to ``output_path`` as a 6-column BED line
+    threshold is written to ``<out_dir>/<out_name>.bed`` as a 6-column BED line
     ``chrom  start  end  motif  score  strand``.
 
     Parameters
@@ -201,8 +202,11 @@ def run_motif_matching(
         Reference FASTA indexed with ``samtools faidx``.
     bed_path : str
         BED file of regions to scan (overlapping intervals are merged).
-    output_path : str
-        Output BED path. Parent directories are created.
+    out_dir : str
+        Output directory. Created if it does not exist.
+    out_name : str
+        Base name (without extension) for the output; writes
+        ``<out_dir>/<out_name>.bed``.
     motifs : list, optional
         Pre-loaded motif objects. When ``None``, motifs are fetched from JASPAR
         using ``release`` / ``collection`` / ``tax_group`` (needs ``pyjaspar``).
@@ -233,9 +237,8 @@ def run_motif_matching(
     regions = _load_regions(bed_path)
     logger.info(f"Scanning {len(regions)} region(s)")
 
-    out_dir = os.path.dirname(os.path.abspath(output_path))
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
+    output_path = os.path.join(out_dir, f"{out_name}.bed")
 
     n_matches = 0
     with pysam.FastaFile(fasta_path) as fasta, open(output_path, "w") as out:

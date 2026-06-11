@@ -5,7 +5,7 @@ Scan the reference sequence of a set of genomic regions (e.g. accessible peaks) 
 ## Synopsis
 
 ```
-deamtools match --fasta FILE --regions FILE --output FILE [options]
+deamtools match --fasta FILE --regions FILE --out_dir DIR --out_name NAME [options]
 ```
 
 ## Required inputs
@@ -14,7 +14,8 @@ deamtools match --fasta FILE --regions FILE --output FILE [options]
 |---|---|
 | `--fasta FILE` | Reference FASTA indexed with `samtools faidx` (`.fai` required). |
 | `--regions FILE` | BED file of regions to scan. Overlapping intervals are merged. |
-| `--output FILE` | Output BED path. Parent directories are created automatically. |
+| `--out_dir DIR` | Output directory. Created automatically if it does not exist. |
+| `--out_name NAME` | Base name (without extension) for the output. Writes `<out_dir>/<out_name>.bed`. |
 
 ## Optional arguments
 
@@ -59,7 +60,7 @@ chrom    start    end    motif    score    strand
 deamtools match \
     --fasta hg38.fa \
     --regions peaks.bed \
-    --output mpbs.bed
+    --out_dir results --out_name mpbs
 
 # Stricter threshold, explicit collection / taxonomic group
 deamtools match \
@@ -68,7 +69,7 @@ deamtools match \
     --collection CORE \
     --tax_group vertebrates \
     --p_value 1e-5 \
-    --output mpbs.bed
+    --out_dir results --out_name mpbs
 ```
 
 ## Notes

@@ -79,7 +79,8 @@ class TestRunMotifMatching:
         out = str(tmp_path / "mpbs.bed")
 
         run_motif_matching(
-            fasta, str(bed), out, motifs=[_motif("AAACCC")], p_value=1e-3
+            fasta, str(bed), str(tmp_path), "mpbs",
+            motifs=[_motif("AAACCC")], p_value=1e-3,
         )
 
         lines = [ln for ln in open(out).read().splitlines() if ln]
@@ -100,7 +101,8 @@ class TestRunMotifMatching:
         out = str(tmp_path / "mpbs.bed")
 
         run_motif_matching(
-            fasta, str(bed), out, motifs=[_motif("AAACCC")], p_value=1e-3
+            fasta, str(bed), str(tmp_path), "mpbs",
+            motifs=[_motif("AAACCC")], p_value=1e-3,
         )
         plus = [
             ln.split("\t")
@@ -115,6 +117,7 @@ class TestRunMotifMatching:
         bed.write_text("chr1\t0\t16\n")
         out = str(tmp_path / "sub" / "dir" / "mpbs.bed")
         run_motif_matching(
-            fasta, str(bed), out, motifs=[_motif("AAACCC")], p_value=1e-3
+            fasta, str(bed), str(tmp_path / "sub" / "dir"), "mpbs",
+            motifs=[_motif("AAACCC")], p_value=1e-3,
         )
         assert os.path.exists(out)
