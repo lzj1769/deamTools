@@ -171,14 +171,20 @@ def _format_row(
 def run_bam2fragment(
     bam_path: str,
     fasta_path: str,
-    output_path: str,
+    out_dir: str,
+    out_name: str,
     min_mapq: int = 20,
     min_baseq: int = 20,
     threads: int = 1,
     barcode: bool = False,
     barcode_tag: str = "CB",
+    gzip: bool = False,
 ) -> None:
-    """Convert ``bam_path`` to a fragment file with per-fragment editing signals."""
+    """Convert ``bam_path`` to a fragment table with per-fragment editing signals.
+
+    The table is written to ``<out_dir>/<out_name>.tsv`` (or ``.tsv.gz`` when
+    ``gzip=True``).
+    """
     logger.info("Running bam2fragment")
     logger.info(f"BAM:   {bam_path}")
     logger.info(f"FASTA: {fasta_path}")
@@ -190,9 +196,8 @@ def run_bam2fragment(
     chroms = list(chrom_sizes.keys())
     logger.info(f"Processing {len(chroms)} chromosome(s) with {threads} thread(s)")
 
-    out_dir = os.path.dirname(os.path.abspath(output_path))
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
+    output_path = os.path.join(out_dir, f"{out_name}.tsv" + (".gz" if gzip else ""))
 
     results: dict[str, dict[_FragKey, int]] = {}
     with ThreadPoolExecutor(max_workers=threads) as pool:

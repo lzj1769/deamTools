@@ -49,7 +49,7 @@ CLI entry point is `deamtools.cli.main:main` (also `python -m deamtools`). `cli/
 
 ### Output-path convention
 
-`index`, `align`, `bam2bw`, `qc`, and `match` take `--out_dir` + `--out_name` and write `<out_dir>/<out_name>.<ext>` (`.bam`/`.bw`/`.json`+`.html`/`.bed`). For `index`/`align` these are optional/derived where noted (`index` defaults the converted-index location next to the FASTA; `align --index` points at a custom one). `bam2fragment` instead takes a single `--output` path. The FASTA `.fai` is always written next to the FASTA (the pysam-based commands require it there).
+All commands that write output (`index`, `align`, `bam2bw`, `bam2fragment`, `qc`, `match`) take `--out_dir` + `--out_name` and write `<out_dir>/<out_name>.<ext>` (`.bam`/`.bw`/`.tsv`/`.json`+`.html`/`.bed`; `bam2fragment --gzip` adds `.gz`). For `index`/`align` these are optional/derived where noted (`index` defaults the converted-index location next to the FASTA; `align --index` points at a custom one). The FASTA `.fai` is always written next to the FASTA (the pysam-based commands require it there).
 
 ### The deamination-aware alignment scheme (index + align)
 

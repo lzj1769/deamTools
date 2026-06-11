@@ -398,16 +398,17 @@ def _add_bam2fragment_parser(subparsers: argparse._SubParsersAction) -> None:
             "examples:\n"
             "  # Bulk fragment table (no barcode)\n"
             "  deamtools bam2fragment --bam sample.bam --fasta hg38.fa \\\n"
-            "      --output sample.fragments.tsv\n"
+            "      --out_dir results --out_name sample\n"
             "\n"
-            "  # Single-cell fragment table with 10x-style barcode tag\n"
+            "  # Single-cell, gzip-compressed, with 10x-style barcode tag\n"
             "  deamtools bam2fragment --bam sample.bam --fasta hg38.fa \\\n"
-            "      --barcode --barcode_tag CB --output sample.fragments.tsv.gz\n"
+            "      --barcode --barcode_tag CB --gzip \\\n"
+            "      --out_dir results --out_name sample\n"
             "\n"
             "notes:\n"
             "  * The BAM must be coordinate-sorted and indexed (.bai).\n"
             "  * The FASTA must be indexed with 'samtools faidx' (.fai).\n"
-            "  * Output paths ending in .gz are written gzip-compressed."
+            "  * Writes <out_dir>/<out_name>.tsv (or .tsv.gz with --gzip)."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -425,13 +426,24 @@ def _add_bam2fragment_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Reference FASTA file indexed with 'samtools faidx' (.fai required).",
     )
     parser.add_argument(
-        "--output",
+        "--out_dir",
         required=True,
-        metavar="FILE",
+        metavar="DIR",
+        help="Output directory. Created if it does not exist.",
+    )
+    parser.add_argument(
+        "--out_name",
+        required=True,
+        metavar="NAME",
         help=(
-            "Output fragment file path. If the path ends with '.gz', the file is "
-            "written gzip-compressed."
+            "Base name (without extension) for the output; writes "
+            "<out_dir>/<out_name>.tsv (or .tsv.gz with --gzip)."
         ),
+    )
+    parser.add_argument(
+        "--gzip",
+        action="store_true",
+        help="Write the fragment table gzip-compressed (<out_name>.tsv.gz).",
     )
 
     parser.add_argument(
@@ -735,12 +747,14 @@ def _run_bam2fragment(args: argparse.Namespace) -> int:
     run_bam2fragment(
         bam_path=args.bam,
         fasta_path=args.fasta,
-        output_path=args.output,
+        out_dir=args.out_dir,
+        out_name=args.out_name,
         min_mapq=args.min_mapq,
         min_baseq=args.min_baseq,
         threads=args.threads,
         barcode=args.barcode,
         barcode_tag=args.barcode_tag,
+        gzip=args.gzip,
     )
     return 0
 

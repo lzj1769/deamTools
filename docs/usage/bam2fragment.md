@@ -5,7 +5,7 @@ Convert a coordinate-sorted BAM file to a per-fragment editing-signal table. Eac
 ## Synopsis
 
 ```
-deamtools bam2fragment --bam FILE --fasta FILE --output FILE [options]
+deamtools bam2fragment --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 ```
 
 ## Required inputs
@@ -14,12 +14,14 @@ deamtools bam2fragment --bam FILE --fasta FILE --output FILE [options]
 |---|---|
 | `--bam FILE` | Coordinate-sorted, indexed BAM file (`.bai` required). |
 | `--fasta FILE` | Reference FASTA indexed with `samtools faidx` (`.fai` required). |
-| `--output FILE` | Output table path. If it ends in `.gz`, the file is written gzip-compressed. |
+| `--out_dir DIR` | Output directory. Created automatically if it does not exist. |
+| `--out_name NAME` | Base name (without extension) for the output. Writes `<out_dir>/<out_name>.tsv` (or `.tsv.gz` with `--gzip`). |
 
 ## Optional arguments
 
 | Argument | Default | Description |
 |---|---|---|
+| `--gzip` | *(off)* | Write the table gzip-compressed (`<out_name>.tsv.gz`). |
 | `--barcode` | *(off)* | Add a barcode column (10x fragments-style ordering). Fragments without the tag get `.`. |
 | `--barcode_tag TAG` | `CB` | BAM tag carrying the cell barcode. |
 | `--min_mapq INT` | `20` | Minimum read mapping quality. |
@@ -49,21 +51,21 @@ Reads flagged unmapped, duplicate, QC-fail, secondary, or supplementary are alwa
 ## Examples
 
 ```bash
-# Bulk fragment table
+# Bulk fragment table -> results/sample.tsv
 deamtools bam2fragment \
     --bam sample.bam \
     --fasta hg38.fa \
-    --output sample.fragments.tsv
+    --out_dir results --out_name sample
 
-# Single-cell, gzip-compressed, with 10x cell barcodes
+# Single-cell, gzip-compressed, with 10x cell barcodes -> results/sample.tsv.gz
 deamtools bam2fragment \
     --bam sample.bam \
     --fasta hg38.fa \
-    --barcode --barcode_tag CB \
-    --output sample.fragments.tsv.gz
+    --barcode --barcode_tag CB --gzip \
+    --out_dir results --out_name sample
 ```
 
 ## Notes
 
 - The fragment table is the natural input for single-molecule and single-cell analyses (per-fragment edit patterns, barcode-level aggregation).
-- Output paths ending in `.gz` are written gzip-compressed automatically.
+- Pass `--gzip` to write `<out_name>.tsv.gz` instead of `<out_name>.tsv`.

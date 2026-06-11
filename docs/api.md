@@ -75,16 +75,18 @@ from deamtools.preprocessing.bam2fragment import run_bam2fragment
 run_bam2fragment(
     bam_path: str,
     fasta_path: str,
-    output_path: str,
+    out_dir: str,
+    out_name: str,
     min_mapq: int = 20,
     min_baseq: int = 20,
     threads: int = 1,
     barcode: bool = False,
     barcode_tag: str = "CB",
+    gzip: bool = False,
 ) -> None
 ```
 
-Write a per-fragment editing-signal table to `output_path` (gzip-compressed when the path ends in `.gz`). With `barcode=True`, a barcode column is added (10x ordering). Editing is strand-aware (`C→T` forward, `G→A` reverse).
+Write a per-fragment editing-signal table to `<out_dir>/<out_name>.tsv` (or `.tsv.gz` when `gzip=True`). With `barcode=True`, a barcode column is added (10x ordering). Editing is strand-aware (`C→T` forward, `G→A` reverse).
 
 ## `deamtools.qc`
 
