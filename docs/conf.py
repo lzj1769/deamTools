@@ -1,8 +1,7 @@
 """Sphinx configuration for the DeamTools documentation.
 
 The docs are written in Markdown and parsed with MyST (myst-parser), and
-rendered with the Read the Docs theme — the same Sphinx + sphinx_rtd_theme
-setup used by RGT (reg-gen.readthedocs.io).
+rendered with the Read the Docs theme (Sphinx + sphinx_rtd_theme).
 """
 
 from importlib.metadata import PackageNotFoundError, version as _pkg_version

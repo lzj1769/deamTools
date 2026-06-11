@@ -32,7 +32,7 @@ Motifs are fetched from JASPAR via the optional **`pyjaspar`** package (`pip ins
 
 ## How it works
 
-The scanning follows `pinellolab/cell2net` and `CostaLab/reg-gen`:
+Scanning is performed with MOODS:
 
 1. Each motif's count matrix is converted to a **log-odds matrix** against a flat background (with a small pseudocount), and its **reverse complement** is added so both strands are scanned.
 2. A per-motif **score threshold** is derived from `--p_value` with `MOODS.tools.threshold_from_p`.

@@ -2,9 +2,9 @@
 
 Scans the sequence of a set of genomic regions (e.g. accessible peaks) for
 occurrences of transcription-factor motifs and writes the hits as a BED file of
-motif-predicted binding sites (MPBSs). The MOODS setup (log-odds matrices,
-p-value-derived thresholds, reverse-complement scanning) follows
-``pinellolab/cell2net`` and ``CostaLab/reg-gen`` (``rgt/motifanalysis/Match.py``).
+motif-predicted binding sites (MPBSs). Scanning uses MOODS: log-odds matrices,
+p-value-derived score thresholds, and reverse-complement matrices for both
+strands.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def prepare_scanner(
     Each motif's count matrix is converted to a log-odds matrix against a flat
     background, a score threshold is derived from ``p_value``, and the reverse
     complement is added so both strands are scanned. The matrices are laid out
-    as ``[fwd_0, ..., fwd_{n-1}, rc_0, ..., rc_{n-1}]`` (matching cell2net), so
+    as ``[fwd_0, ..., fwd_{n-1}, rc_0, ..., rc_{n-1}]``, so
     ``scanner.scan(seq)[i]`` holds the forward hits and ``[i + n]`` the
     reverse-complement hits for motif ``i``.
 
