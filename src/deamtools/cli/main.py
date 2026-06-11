@@ -7,6 +7,7 @@ import sys
 
 from deamtools.align.align import run_align
 from deamtools.align.index import run_index
+from deamtools.footprint import run_footprint
 from deamtools.motif.match import run_motif_matching
 from deamtools.preprocessing.bam2bw import run_bam2bw
 from deamtools.preprocessing.bam2fragment import run_bam2fragment
@@ -63,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_bam2fragment_parser(subparsers)
     _add_qc_parser(subparsers)
     _add_match_parser(subparsers)
+    _add_footprint_parser(subparsers)
 
     return parser
 
@@ -716,6 +718,87 @@ def _add_match_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_run_match)
 
 
+def _add_footprint_parser(subparsers: argparse._SubParsersAction) -> None:
+    parser = subparsers.add_parser(
+        "footprint",
+        help=(
+            "Score transcription-factor footprints at motif sites from a "
+            "per-base editing BigWig."
+        ),
+        description=(
+            "Compute a footprint score for each motif site in a BED using a\n"
+            "per-base editing BigWig (e.g. from 'deamtools bam2bw').\n"
+            "\n"
+            "For a site of width L the signal over the 3*L window [start-L,\n"
+            "end+L) is split into left flank / motif centre / right flank, and\n"
+            "scored as mean(left) + mean(right) - mean(centre): a bound factor\n"
+            "shields its motif from editing, giving a positive score. A p-value\n"
+            "is estimated by permuting the window signal --n_shuffles times."
+        ),
+        epilog=(
+            "examples:\n"
+            "  deamtools footprint --bigwig sample.bw --regions mpbs.bed \\\n"
+            "      --out_dir results --out_name footprints\n"
+            "\n"
+            "notes:\n"
+            "  * The BigWig is typically produced by 'deamtools bam2bw'.\n"
+            "  * --regions is a BED of motif sites (e.g. from 'deamtools match');\n"
+            "    column 4 is carried through as the site name.\n"
+            "  * Output is BED-like: chrom, start, end, name, fp_score, p_value."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--bigwig",
+        required=True,
+        metavar="FILE",
+        help="Per-base editing BigWig (e.g. from 'deamtools bam2bw').",
+    )
+    parser.add_argument(
+        "--regions",
+        required=True,
+        metavar="FILE",
+        help="BED of motif sites to score (e.g. from 'deamtools match').",
+    )
+    parser.add_argument(
+        "--out_dir",
+        required=True,
+        metavar="DIR",
+        help="Output directory. Created if it does not exist.",
+    )
+    parser.add_argument(
+        "--out_name",
+        required=True,
+        metavar="NAME",
+        help=(
+            "Base name (without extension) for the output; writes "
+            "<out_dir>/<out_name>.bed."
+        ),
+    )
+    parser.add_argument(
+        "--n_shuffles",
+        type=int,
+        default=1000,
+        metavar="INT",
+        help="Permutations for the footprint p-value null. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        metavar="INT",
+        help="Number of threads (chromosomes scored in parallel). Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        metavar="INT",
+        help="RNG seed for reproducible p-values. Default: unseeded.",
+    )
+    parser.set_defaults(func=_run_footprint)
+
+
 def _run_index(args: argparse.Namespace) -> int:
     _log_invocation(args)
     run_index(
@@ -808,6 +891,20 @@ def _run_match(args: argparse.Namespace) -> int:
         collection=args.collection,
         tax_group=args.tax_group,
         p_value=args.p_value,
+    )
+    return 0
+
+
+def _run_footprint(args: argparse.Namespace) -> int:
+    _log_invocation(args)
+    run_footprint(
+        bigwig_path=args.bigwig,
+        regions_path=args.regions,
+        out_dir=args.out_dir,
+        out_name=args.out_name,
+        n_shuffles=args.n_shuffles,
+        threads=args.threads,
+        seed=args.seed,
     )
     return 0
 

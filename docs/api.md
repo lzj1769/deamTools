@@ -147,6 +147,26 @@ matches = scan_sequence(scanner, motifs, seq, chrom, offset=0)
 
 `prepare_scanner` builds a `MOODS.scan.Scanner` (log-odds matrices, p-value thresholds, reverse complements). `scan_sequence` scans one sequence and returns `(chrom, start, end, name, score, strand)` tuples. These let you scan in-memory sequences/motifs without writing a BED.
 
+## `deamtools.footprint`
+
+### `run_footprint`
+
+```python
+from deamtools.footprint import run_footprint
+
+run_footprint(
+    bigwig_path: str,
+    regions_path: str,
+    out_dir: str,
+    out_name: str,
+    n_shuffles: int = 1000,
+    threads: int = 1,
+    seed: int | None = None,
+) -> None
+```
+
+Score TF footprints at motif sites. For each site of width `L`, reads the per-base BigWig over the `3 * L` window `[start - L, end + L)` and computes `fp_score = mean(left flank) + mean(right flank) - mean(centre)`; positive scores get a permutation p-value (`n_shuffles` within-window permutations). Writes `<out_dir>/<out_name>.bed` with columns `chrom, start, end, name, fp_score, p_value`. Sites whose window falls off the chromosome are skipped.
+
 ## `deamtools.utils`
 
 ```python

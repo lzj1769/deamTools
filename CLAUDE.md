@@ -43,6 +43,7 @@ CLI entry point is `deamtools.cli.main:main` (also `python -m deamtools`). `cli/
 | `bam2fragment` | `preprocessing/bam2fragment.py` | `run_bam2fragment` — per-fragment editing-signal table (bulk or barcoded) |
 | `qc` | `qc/qc.py` | `run_qc` — QC metrics → JSON + self-contained HTML report (incl. motif logo) |
 | `match` | `motif/match.py` | `run_motif_matching` — MOODS motif scan → BED of binding sites |
+| `footprint` | `footprint/footprint.py` | `run_footprint` — TF footprint score + permutation p-value at motif sites, from a BigWig |
 | — | `utils/` | `_load_regions` (BED parse+merge), `get_chrom_sizes_from_{bam,file}`, `get_version`, `logger` |
 
 `preprocessing/fragment2bw.py` is an empty placeholder (not wired up).
@@ -69,6 +70,7 @@ The conceptual core, spanning two files (bwa-meth / three-letter strategy):
 - **`bam2bw` modes.** `count` writes raw edit counts and honors `--extend_size` (broadcasts each event into a `2*extend_size+1` window); `ratio` writes `edits / total_ACGT_coverage`, masks positions below `--min_coverage` to 0, and ignores `--extend_size`.
 - **`qc`.** Single pass over the BAM accumulates: read stats, editing rate, per-read edit-rate distribution, trinucleotide context bias, fragment-length distribution, optional TSS enrichment, and a **deaminase motif PWM** (window around each edit, centre excluded, G-edits reverse-complemented). Outputs JSON + a self-contained HTML report that embeds a matplotlib summary figure and a `logomaker` motif logo (both base64, `Agg` backend).
 - **`match`.** Builds a `MOODS.scan.Scanner` (`prepare_scanner`: log-odds matrices, p-value thresholds, reverse complements laid out as `[fwd_0..fwd_{n-1}, rc_0..rc_{n-1}]`), scans each region's sequence, and writes 6-column BED (`chrom start end motif score strand`). Motifs come from JASPAR (`pyjaspar`) or a caller-supplied list.
+- **`footprint`.** For each motif site (width `L`) reads a per-base BigWig over `[start-L, end+L)` and scores `mean(left flank) + mean(right flank) - mean(centre)`; a positive score gets a permutation p-value from `n_shuffles` within-window shuffles (vectorised with a NumPy `Generator`). Parses the regions BED directly (not `_load_regions`, which merges and drops names) and parallelises over chromosomes. Writes `chrom start end name fp_score p_value`.
 
 The counting/alignment logic intentionally mirrors the upstream ACCESS-ATAC reference (pinellolab/ACCESS-ATAC); preserve that correspondence.
 

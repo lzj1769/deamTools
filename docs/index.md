@@ -71,6 +71,7 @@ DeamTools is organised as a set of subcommands, run as `deamtools <command>`:
 | [`bam2fragment`](usage/bam2fragment.md) | Convert a BAM to a per-fragment editing-signal table (bulk or single-cell). |
 | [`qc`](usage/qc.md) | Quality-control metrics — including the deaminase sequence-motif logo — in a self-contained HTML report. |
 | [`match`](usage/match.md) | Scan regions for TF motif matches (MOODS) and write a BED of binding sites. |
+| [`footprint`](usage/footprint.md) | Score TF footprints at motif sites from a BigWig (flank-vs-centre depletion). |
 
 ## Workflow
 
@@ -169,6 +170,7 @@ usage/bam2bw
 usage/bam2fragment
 usage/qc
 usage/match
+usage/footprint
 ```
 
 ```{toctree}
