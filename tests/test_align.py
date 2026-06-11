@@ -6,20 +6,17 @@ names.
 """
 
 import io
-from types import SimpleNamespace
 
 import pytest
 
 from deamtools.align.align import (
-    CT_TABLE,
-    GA_TABLE,
     _emit_clean_header,
     _feed_converted,
     _hard_clip_offsets,
     _process_sam,
     _restore_alignment,
     _revcomp,
-    _write_converted,
+    _write_record,
     run_align,
 )
 
@@ -49,48 +46,47 @@ class TestHelpers:
         assert _hard_clip_offsets("3H50M") == (3, 0)
 
 
-class TestWriteConverted:
-    def test_ct_conversion_and_ys_tag(self):
+class TestWriteRecord:
+    def test_record_with_ys_and_yc_tags(self):
         out = io.StringIO()
-        entry = SimpleNamespace(name="r1", sequence="ACGTC", quality="IIIII")
-        _write_converted(out, entry, CT_TABLE)
-        assert out.getvalue() == "@r1\tYS:Z:ACGTC\nATGTT\n+\nIIIII\n"
-
-    def test_ga_conversion(self):
-        out = io.StringIO()
-        entry = SimpleNamespace(name="r2", sequence="ACGTC", quality="IIIII")
-        _write_converted(out, entry, GA_TABLE)
-        assert out.getvalue() == "@r2\tYS:Z:ACGTC\nACATC\n+\nIIIII\n"
-
-    def test_missing_quality_filled(self):
-        out = io.StringIO()
-        entry = SimpleNamespace(name="r1", sequence="ACGTC", quality=None)
-        _write_converted(out, entry, CT_TABLE)
-        assert out.getvalue() == "@r1\tYS:Z:ACGTC\nATGTT\n+\nIIIII\n"
+        _write_record(out, "r1", "ATGTT", "IIIII", "ct", "ACGTC")
+        assert out.getvalue() == "@r1\tYS:Z:ACGTC\tYC:Z:ct\nATGTT\n+\nIIIII\n"
 
 
 class TestFeedConverted:
-    def test_single_end_converts_ct(self, tmp_path):
+    def test_single_end_emits_ct_and_ga_candidates(self, tmp_path):
         fq1 = str(tmp_path / "r1.fq")
-        _write_fastq(fq1, [("a", "ACGTC", "IIIII"), ("b", "CCGG", "IIII")])
+        _write_fastq(fq1, [("a", "ACGTC", "IIIII")])
         cap = _Capture()
         _feed_converted(fq1, None, cap)
-        text = cap.getvalue()
-        # Both records present, C->T converted.
-        assert "@a\tYS:Z:ACGTC\nATGTT\n" in text
-        assert "@b\tYS:Z:CCGG\nTTGG\n" in text
+        # Two candidates per read: C->T (ct) then G->A (ga), same read name.
+        assert cap.getvalue() == (
+            "@a\tYS:Z:ACGTC\tYC:Z:ct\nATGTT\n+\nIIIII\n"
+            "@a\tYS:Z:ACGTC\tYC:Z:ga\nACATC\n+\nIIIII\n"
+        )
 
-    def test_paired_interleaves_r1_ct_r2_ga(self, tmp_path):
+    def test_missing_quality_filled(self, tmp_path):
+        fq1 = str(tmp_path / "r1.fq")
+        with open(fq1, "w") as f:  # FASTA-style (no qualities) via FastxFile
+            f.write(">a\nACGTC\n")
+        cap = _Capture()
+        _feed_converted(fq1, None, cap)
+        assert "\nATGTT\n+\nIIIII\n" in cap.getvalue()
+
+    def test_paired_emits_f_and_r_orientations(self, tmp_path):
         fq1 = str(tmp_path / "r1.fq")
         fq2 = str(tmp_path / "r2.fq")
         _write_fastq(fq1, [("a", "ACGTC", "IIIII")])
-        _write_fastq(fq2, [("a", "ACGTC", "IIIII")])
+        _write_fastq(fq2, [("a", "ACGTC", "JJJJJ")])
         cap = _Capture()
         _feed_converted(fq1, fq2, cap)
-        # R1 is C->T, R2 is G->A, in that order.
         assert cap.getvalue() == (
-            "@a\tYS:Z:ACGTC\nATGTT\n+\nIIIII\n"
-            "@a\tYS:Z:ACGTC\nACATC\n+\nIIIII\n"
+            # orientation f: r1 C->T, r2 G->A
+            "@a\tYS:Z:ACGTC\tYC:Z:f\nATGTT\n+\nIIIII\n"
+            "@a\tYS:Z:ACGTC\tYC:Z:f\nACATC\n+\nJJJJJ\n"
+            # orientation r: r1 G->A, r2 C->T
+            "@a\tYS:Z:ACGTC\tYC:Z:r\nACATC\n+\nIIIII\n"
+            "@a\tYS:Z:ACGTC\tYC:Z:r\nATGTT\n+\nJJJJJ\n"
         )
 
     def test_paired_length_mismatch_raises(self, tmp_path):
@@ -158,6 +154,17 @@ class TestRestoreAlignment:
         fields = _restore_alignment(line).rstrip("\n").split("\t")
         assert fields[2] == "*"
         assert fields[9] == "ACGTC"  # SEQ still restored
+
+    def test_drops_yc_tag(self):
+        line = _sam_line(
+            ["r1", "0", "fchr1", "10", "60", "5M", "*", "0", "0",
+             "ATGTT", "IIIII", "YS:Z:ACGTC", "YC:Z:f", "NM:i:1"]
+        )
+        out = _restore_alignment(line)
+        assert "YC:Z:" not in out          # candidate marker dropped
+        assert "YS:Z:" not in out          # original-seq tag dropped
+        assert "NM:i:1" in out             # real tags kept
+        assert out.rstrip("\n").split("\t")[9] == "ACGTC"
 
 
 class TestIndexResolution:
@@ -233,3 +240,40 @@ class TestHeaderAndStream:
         aln = text.strip().split("\n")[-1].split("\t")
         assert aln[2] == "chr1"
         assert aln[9] == "ACGTC"
+
+    def test_process_sam_se_picks_higher_scoring_candidate(self):
+        # Same read name, two candidates; ct has higher AS -> ct kept, ga dropped.
+        ct = _sam_line(
+            ["r1", "0", "fchr1", "10", "60", "5M", "*", "0", "0",
+             "ATGTT", "IIIII", "YS:Z:ACGTC", "YC:Z:ct", "AS:i:50"]
+        )
+        ga = _sam_line(
+            ["r1", "0", "rchr2", "20", "60", "5M", "*", "0", "0",
+             "ACATC", "IIIII", "YS:Z:ACGTC", "YC:Z:ga", "AS:i:10"]
+        )
+        sink = io.StringIO()
+        _process_sam(io.StringIO(ct + ga), sink)
+        lines = [ln for ln in sink.getvalue().splitlines() if ln]
+        assert len(lines) == 1                 # only the winning candidate
+        fields = lines[0].split("\t")
+        assert fields[2] == "chr1"             # ct candidate (fchr1 -> chr1)
+        assert "YC:Z:" not in lines[0]
+        assert fields[9] == "ACGTC"
+
+    def test_process_sam_pe_picks_best_orientation(self):
+        # Orientation r (40+40) beats f (10+10); both mates of r are kept.
+        f1 = _sam_line(["p", "65", "fchr1", "10", "60", "5M", "=", "30", "25",
+                        "ATGTT", "IIIII", "YS:Z:ACGTC", "YC:Z:f", "AS:i:10"])
+        f2 = _sam_line(["p", "129", "fchr1", "30", "60", "5M", "=", "10", "-25",
+                        "ACATC", "IIIII", "YS:Z:ACGTC", "YC:Z:f", "AS:i:10"])
+        r1 = _sam_line(["p", "65", "rchr1", "10", "60", "5M", "=", "30", "25",
+                        "ACATC", "IIIII", "YS:Z:ACGTC", "YC:Z:r", "AS:i:40"])
+        r2 = _sam_line(["p", "129", "rchr1", "30", "60", "5M", "=", "10", "-25",
+                        "ATGTT", "IIIII", "YS:Z:ACGTC", "YC:Z:r", "AS:i:40"])
+        sink = io.StringIO()
+        _process_sam(io.StringIO(f1 + f2 + r1 + r2), sink)
+        lines = [ln for ln in sink.getvalue().splitlines() if ln]
+        assert len(lines) == 2                 # both mates of the winner only
+        for ln in lines:
+            assert ln.split("\t")[2] == "chr1"  # rchr1 -> chr1
+            assert "YC:Z:" not in ln

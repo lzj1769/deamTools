@@ -35,9 +35,9 @@ Pattern: `ref_base == 'G'` and `read_base == 'A'`.
 Heavily edited reads align poorly to an unmodified reference, so DeamTools uses a bwa-meth-style three-letter strategy.
 
 - **`index`** writes a *doubly-converted* reference: every chromosome appears twice, once with all C→T (prefixed `f`) and once with all G→A (prefixed `r`), then runs `bwa index` on it.
-- **`align`** converts reads on the fly (read 1 → C→T, read 2 → G→A), stashing the original sequence in a `YS:Z:` tag carried through `bwa mem -C`. After mapping, the original SEQ is restored from `YS`, the `f`/`r` prefix is stripped from the chromosome name, and the BAM is sorted and indexed.
+- **`align`** maps each read in **both** conversion directions and keeps whichever scores higher. Because the deaminase edits both strands, a single read can carry both `C→T` and `G→A` edits, so each read is emitted twice: single-end as `C→T` (`YC:Z:ct`) and `G→A` (`YC:Z:ga`); paired-end as two fragment orientations `f` = (R1 `C→T`, R2 `G→A`) and `r` = (R1 `G→A`, R2 `C→T`). The original sequence is stashed in `YS:Z:` and the candidate in `YC:Z:`, both carried through `bwa mem -C`.
 
-Because read 1 and read 2 are converted with complementary tables, both mates of a fragment map to the same converted contig, so proper pairing is preserved.
+After mapping, records are grouped by read name and the candidate with the higher primary alignment score (sum of the mates' `AS` for pairs) is kept; the original SEQ is restored from `YS`, the `f`/`r` prefix is stripped from RNAME/RNEXT, the `YS`/`YC` tags are dropped, and the BAM is sorted and indexed. Choosing one orientation per fragment keeps the mates on the same converted contig, so proper pairing is preserved.
 
 ## Edit detection conventions
 
