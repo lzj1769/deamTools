@@ -1,0 +1,449 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bam2bw &mdash; DeamTools</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=a7ae4c86" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="bam2fragment" href="bam2fragment.html" />
+    <link rel="prev" title="align" href="align.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            DeamTools
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#install-deamtools">Install DeamTools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#python-dependencies">Python dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#verify-installation">Verify installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#running-tests">Running tests</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Commands</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="index.html">index</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="index.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#arguments">Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="align.html">align</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="align.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">bam2bw</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="bam2fragment.html">bam2fragment</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#output-format">Output format</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="qc.html">qc</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#metrics">Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="match.html">match</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="match.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="footprint.html">footprint</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#notes">Notes</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../algorithm.html">Algorithm</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#biological-basis">Biological basis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#strand-convention">Strand convention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#deamination-aware-alignment-index-align">Deamination-aware alignment (<code class="docutils literal notranslate"><span class="pre">index</span></code> + <code class="docutils literal notranslate"><span class="pre">align</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#edit-detection-conventions">Edit detection conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#signal-generation-bam2bw">Signal generation (<code class="docutils literal notranslate"><span class="pre">bam2bw</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#enzyme-sequence-bias">Enzyme sequence bias</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#parallelism-and-output">Parallelism and output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#complexity">Complexity</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-align-index"><code class="docutils literal notranslate"><span class="pre">deamtools.align.index</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-align-align"><code class="docutils literal notranslate"><span class="pre">deamtools.align.align</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-preprocessing-bam2bw"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2bw</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-preprocessing-bam2fragment"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2fragment</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-qc"><code class="docutils literal notranslate"><span class="pre">deamtools.qc</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-motif-match"><code class="docutils literal notranslate"><span class="pre">deamtools.motif.match</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-footprint"><code class="docutils literal notranslate"><span class="pre">deamtools.footprint</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-utils"><code class="docutils literal notranslate"><span class="pre">deamtools.utils</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">DeamTools</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">bam2bw</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/usage/bam2bw.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="bam2bw">
+<h1>bam2bw<a class="headerlink" href="#bam2bw" title="Link to this heading"></a></h1>
+<p>Convert a coordinate-sorted BAM file to a BigWig track of per-base C→T deamination counts.</p>
+<section id="synopsis">
+<h2>Synopsis<a class="headerlink" href="#synopsis" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">deamtools</span> <span class="n">bam2bw</span> <span class="o">--</span><span class="n">bam</span> <span class="n">FILE</span> <span class="o">--</span><span class="n">fasta</span> <span class="n">FILE</span> <span class="o">--</span><span class="n">out_dir</span> <span class="n">DIR</span> <span class="o">--</span><span class="n">out_name</span> <span class="n">NAME</span> <span class="p">[</span><span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="required-inputs">
+<h2>Required inputs<a class="headerlink" href="#required-inputs" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--bam</span> <span class="pre">FILE</span></code></p></td>
+<td><p>Coordinate-sorted BAM file. Must be accompanied by an index (<code class="docutils literal notranslate"><span class="pre">.bai</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--fasta</span> <span class="pre">FILE</span></code></p></td>
+<td><p>Reference FASTA file used during alignment. Must be indexed with <code class="docutils literal notranslate"><span class="pre">samtools</span> <span class="pre">faidx</span></code> (<code class="docutils literal notranslate"><span class="pre">.fai</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--out_dir</span> <span class="pre">DIR</span></code></p></td>
+<td><p>Output directory. Created automatically if it does not exist.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--out_name</span> <span class="pre">NAME</span></code></p></td>
+<td><p>Base name (without extension) for the output. The BigWig is written to <code class="docutils literal notranslate"><span class="pre">&lt;out_dir&gt;/&lt;out_name&gt;.bw</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="optional-arguments">
+<h2>Optional arguments<a class="headerlink" href="#optional-arguments" title="Link to this heading"></a></h2>
+<section id="input-scope">
+<h3>Input / scope<a class="headerlink" href="#input-scope" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--chrom_sizes</span> <span class="pre">FILE</span></code></p></td>
+<td><p><em>(BAM header)</em></p></td>
+<td><p>Tab-delimited chromosome sizes file (<code class="docutils literal notranslate"><span class="pre">chrom\tsize</span></code>). When omitted, chromosome names and sizes are read from the BAM header.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--regions</span> <span class="pre">FILE</span></code></p></td>
+<td><p><em>(whole genome)</em></p></td>
+<td><p>BED file of genomic regions to restrict processing to. Only reads overlapping these intervals are examined, which can substantially reduce runtime for targeted analyses. Overlapping intervals within the same chromosome are merged automatically to prevent double-counting.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="signal">
+<h3>Signal<a class="headerlink" href="#signal" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--extend_size</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0</span></code></p></td>
+<td><p>Symmetrically extend each detected deamination site by INT base pairs in both directions before writing to the BigWig. A value of 50 means each event at position <em>p</em> contributes signal to [<em>p</em>−50, <em>p</em>+50]. Implemented as a box-kernel convolution, so the signal at a position equals the number of events within <code class="docutils literal notranslate"><span class="pre">extend_size</span></code> bases.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--normalize</span></code></p></td>
+<td><p><em>(off)</em></p></td>
+<td><p>In count mode (the default), scale every value by <code class="docutils literal notranslate"><span class="pre">scale_factor</span> <span class="pre">/</span> <span class="pre">(genome-wide</span> <span class="pre">total</span> <span class="pre">count)</span></code> so the written track sums to <code class="docutils literal notranslate"><span class="pre">--scale_factor</span></code> — reads/counts-per-million-style normalization that makes samples comparable regardless of editing depth. With <code class="docutils literal notranslate"><span class="pre">--extend_size</span> <span class="pre">0</span></code> this is counts per <code class="docutils literal notranslate"><span class="pre">scale_factor</span></code> edits. Ignored in <code class="docutils literal notranslate"><span class="pre">--mode</span> <span class="pre">ratio</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--scale_factor</span> <span class="pre">FLOAT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1000000</span></code></p></td>
+<td><p>Target total for <code class="docutils literal notranslate"><span class="pre">--normalize</span></code> (1e6 gives per-million values).</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="quality-filters">
+<h3>Quality filters<a class="headerlink" href="#quality-filters" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--min_mapq</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">20</span></code></p></td>
+<td><p>Minimum read mapping quality (MAPQ). Reads strictly below this value are skipped entirely.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--min_baseq</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">20</span></code></p></td>
+<td><p>Minimum base quality (phred score) at a candidate position. Individual bases below this value are not counted even if the read passes MAPQ filtering.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Regardless of these thresholds, the following reads are always excluded:</p>
+<ul class="simple">
+<li><p>Unmapped reads (flag <code class="docutils literal notranslate"><span class="pre">0x4</span></code>)</p></li>
+<li><p>PCR/optical duplicates (flag <code class="docutils literal notranslate"><span class="pre">0x400</span></code>)</p></li>
+<li><p>QC-failed reads (flag <code class="docutils literal notranslate"><span class="pre">0x200</span></code>)</p></li>
+<li><p>Secondary alignments (flag <code class="docutils literal notranslate"><span class="pre">0x100</span></code>)</p></li>
+<li><p>Supplementary alignments (flag <code class="docutils literal notranslate"><span class="pre">0x800</span></code>)</p></li>
+</ul>
+</section>
+<section id="performance">
+<h3>Performance<a class="headerlink" href="#performance" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--threads</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+<td><p>Number of threads for parallel processing. Each thread handles one chromosome independently.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="global-option-before-the-subcommand">
+<h3>Global option (before the subcommand)<a class="headerlink" href="#global-option-before-the-subcommand" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--log_level</span> <span class="pre">LEVEL</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">INFO</span></code></p></td>
+<td><p>Logging verbosity. One of <code class="docutils literal notranslate"><span class="pre">DEBUG</span></code>, <code class="docutils literal notranslate"><span class="pre">INFO</span></code>, <code class="docutils literal notranslate"><span class="pre">WARNING</span></code>, <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="input-file-preparation">
+<h2>Input file preparation<a class="headerlink" href="#input-file-preparation" title="Link to this heading"></a></h2>
+<p>Before running <code class="docutils literal notranslate"><span class="pre">bam2bw</span></code>, your BAM and FASTA files must be sorted and indexed.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Sort and index BAM</span>
+samtools<span class="w"> </span>sort<span class="w"> </span>-o<span class="w"> </span>sample.sorted.bam<span class="w"> </span>sample.bam
+samtools<span class="w"> </span>index<span class="w"> </span>sample.sorted.bam
+
+<span class="c1"># Index reference FASTA</span>
+samtools<span class="w"> </span>faidx<span class="w"> </span>hg38.fa
+
+<span class="c1"># (Optional) Generate chromosome sizes file from FASTA index</span>
+cut<span class="w"> </span>-f1,2<span class="w"> </span>hg38.fa.fai<span class="w"> </span>&gt;<span class="w"> </span>hg38.chrom.sizes
+</pre></div>
+</div>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<section id="whole-genome-run">
+<h3>Whole-genome run<a class="headerlink" href="#whole-genome-run" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>deamtools<span class="w"> </span>bam2bw<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bam<span class="w"> </span>sample.sorted.bam<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fasta<span class="w"> </span>hg38.fa<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>results<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_name<span class="w"> </span>sample
+</pre></div>
+</div>
+<p>Writes <code class="docutils literal notranslate"><span class="pre">results/sample.bw</span></code>. Uses default MAPQ ≥ 20 and base quality ≥ 20. Chromosome sizes are read from the BAM header.</p>
+</section>
+<section id="restrict-to-peaks-and-use-stricter-quality-filters">
+<h3>Restrict to peaks and use stricter quality filters<a class="headerlink" href="#restrict-to-peaks-and-use-stricter-quality-filters" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>deamtools<span class="w"> </span>bam2bw<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bam<span class="w"> </span>sample.sorted.bam<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fasta<span class="w"> </span>hg38.fa<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--regions<span class="w"> </span>peaks.bed<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--min_mapq<span class="w"> </span><span class="m">30</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--min_baseq<span class="w"> </span><span class="m">30</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>results<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_name<span class="w"> </span>sample_peaks
+</pre></div>
+</div>
+<p>Only reads overlapping intervals in <code class="docutils literal notranslate"><span class="pre">peaks.bed</span></code> are processed, which is much faster than a whole-genome run when peaks cover a small fraction of the genome.</p>
+</section>
+<section id="extend-each-deamination-event-by-50-bp">
+<h3>Extend each deamination event by 50 bp<a class="headerlink" href="#extend-each-deamination-event-by-50-bp" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>deamtools<span class="w"> </span>bam2bw<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bam<span class="w"> </span>sample.sorted.bam<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fasta<span class="w"> </span>hg38.fa<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--extend_size<span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>results<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_name<span class="w"> </span>sample_extended
+</pre></div>
+</div>
+<p>Each C→T event contributes signal to a 101-bp window centred on the event position. Useful when the raw per-base signal is too sparse for downstream peak calling.</p>
+</section>
+<section id="parallel-chromosome-processing-with-explicit-chromosome-sizes">
+<h3>Parallel chromosome processing with explicit chromosome sizes<a class="headerlink" href="#parallel-chromosome-processing-with-explicit-chromosome-sizes" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>deamtools<span class="w"> </span>bam2bw<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bam<span class="w"> </span>sample.sorted.bam<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fasta<span class="w"> </span>hg38.fa<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chrom_sizes<span class="w"> </span>hg38.chrom.sizes<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--threads<span class="w"> </span><span class="m">8</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>results<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_name<span class="w"> </span>sample
+</pre></div>
+</div>
+</section>
+<section id="enable-debug-logging">
+<h3>Enable debug logging<a class="headerlink" href="#enable-debug-logging" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>deamtools<span class="w"> </span>--log_level<span class="w"> </span>DEBUG<span class="w"> </span>bam2bw<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bam<span class="w"> </span>sample.sorted.bam<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fasta<span class="w"> </span>hg38.fa<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>results<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_name<span class="w"> </span>sample
+</pre></div>
+</div>
+<p>Note that <code class="docutils literal notranslate"><span class="pre">--log_level</span></code> is a global flag and must appear <strong>before</strong> the subcommand name.</p>
+</section>
+</section>
+<section id="output">
+<h2>Output<a class="headerlink" href="#output" title="Link to this heading"></a></h2>
+<p>The output is a BigWig file in variable-step format. Only positions with non-zero signal are written, keeping file sizes small. The BigWig is directly compatible with genome browsers (IGV, UCSC) and downstream tools (deepTools, MACS3, etc.).</p>
+<p>The value at each position is the number of deamination events observed there. If <code class="docutils literal notranslate"><span class="pre">--extend_size</span></code> is used, the value at position <em>p</em> is the number of raw events within <code class="docutils literal notranslate"><span class="pre">extend_size</span></code> bases of <em>p</em>.</p>
+</section>
+<section id="choosing-parameters">
+<h2>Choosing parameters<a class="headerlink" href="#choosing-parameters" title="Link to this heading"></a></h2>
+<p><strong><code class="docutils literal notranslate"><span class="pre">--min_mapq</span></code></strong> — A value of 20 (default) retains reads with ≥ 99% mapping accuracy. For repetitive regions or multi-mapping reads, raise to 30. Setting to 0 disables MAPQ filtering.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">--min_baseq</span></code></strong> — A value of 20 (default) corresponds to 99% base-call accuracy. Lowering increases sensitivity but also increases noise from sequencing errors. Raising above 30 can be overly strict for older sequencing data.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">--extend_size</span></code></strong> — Set to 0 (default) for the raw single-base signal. For footprinting or broad accessibility analysis, values of 50–200 bp are typical. The optimal value depends on the expected size of accessible regions in your assay.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">--threads</span></code></strong> — Parallelism is at the chromosome level. Setting <code class="docutils literal notranslate"><span class="pre">--threads</span></code> above the number of chromosomes provides no benefit. For a human genome run, 8–24 threads is a reasonable range.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="align.html" class="btn btn-neutral float-left" title="align" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="bam2fragment.html" class="btn btn-neutral float-right" title="bam2fragment" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Zhijian Li.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

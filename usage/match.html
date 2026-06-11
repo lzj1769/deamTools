@@ -1,0 +1,332 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>match &mdash; DeamTools</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=a7ae4c86" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="footprint" href="footprint.html" />
+    <link rel="prev" title="qc" href="qc.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            DeamTools
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#install-deamtools">Install DeamTools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#python-dependencies">Python dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#verify-installation">Verify installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#running-tests">Running tests</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Commands</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="index.html">index</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="index.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#arguments">Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="align.html">align</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="align.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="bam2bw.html">bam2bw</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="bam2fragment.html">bam2fragment</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#output-format">Output format</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="qc.html">qc</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#metrics">Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">match</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="footprint.html">footprint</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#notes">Notes</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../algorithm.html">Algorithm</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#biological-basis">Biological basis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#strand-convention">Strand convention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#deamination-aware-alignment-index-align">Deamination-aware alignment (<code class="docutils literal notranslate"><span class="pre">index</span></code> + <code class="docutils literal notranslate"><span class="pre">align</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#edit-detection-conventions">Edit detection conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#signal-generation-bam2bw">Signal generation (<code class="docutils literal notranslate"><span class="pre">bam2bw</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#enzyme-sequence-bias">Enzyme sequence bias</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#parallelism-and-output">Parallelism and output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#complexity">Complexity</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-align-index"><code class="docutils literal notranslate"><span class="pre">deamtools.align.index</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-align-align"><code class="docutils literal notranslate"><span class="pre">deamtools.align.align</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-preprocessing-bam2bw"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2bw</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-preprocessing-bam2fragment"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2fragment</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-qc"><code class="docutils literal notranslate"><span class="pre">deamtools.qc</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-motif-match"><code class="docutils literal notranslate"><span class="pre">deamtools.motif.match</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-footprint"><code class="docutils literal notranslate"><span class="pre">deamtools.footprint</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-utils"><code class="docutils literal notranslate"><span class="pre">deamtools.utils</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">DeamTools</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">match</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/usage/match.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="match">
+<h1>match<a class="headerlink" href="#match" title="Link to this heading"></a></h1>
+<p>Scan the reference sequence of a set of genomic regions (e.g. accessible peaks) for transcription-factor motif occurrences and write them as a BED of motif-predicted binding sites (MPBSs). These sites are the anchors for downstream footprinting and occupancy analysis.</p>
+<section id="synopsis">
+<h2>Synopsis<a class="headerlink" href="#synopsis" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">deamtools</span> <span class="n">match</span> <span class="o">--</span><span class="n">fasta</span> <span class="n">FILE</span> <span class="o">--</span><span class="n">regions</span> <span class="n">FILE</span> <span class="o">--</span><span class="n">out_dir</span> <span class="n">DIR</span> <span class="o">--</span><span class="n">out_name</span> <span class="n">NAME</span> <span class="p">[</span><span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="required-inputs">
+<h2>Required inputs<a class="headerlink" href="#required-inputs" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--fasta</span> <span class="pre">FILE</span></code></p></td>
+<td><p>Reference FASTA indexed with <code class="docutils literal notranslate"><span class="pre">samtools</span> <span class="pre">faidx</span></code> (<code class="docutils literal notranslate"><span class="pre">.fai</span></code> required).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--regions</span> <span class="pre">FILE</span></code></p></td>
+<td><p>BED file of regions to scan. Overlapping intervals are merged.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--out_dir</span> <span class="pre">DIR</span></code></p></td>
+<td><p>Output directory. Created automatically if it does not exist.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--out_name</span> <span class="pre">NAME</span></code></p></td>
+<td><p>Base name (without extension) for the output. Writes <code class="docutils literal notranslate"><span class="pre">&lt;out_dir&gt;/&lt;out_name&gt;.bed</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="optional-arguments">
+<h2>Optional arguments<a class="headerlink" href="#optional-arguments" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--jaspar_release</span> <span class="pre">STR</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">JASPAR2024</span></code></p></td>
+<td><p>JASPAR release to fetch motifs from.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--collection</span> <span class="pre">STR</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">CORE</span></code></p></td>
+<td><p>JASPAR motif collection (e.g. <code class="docutils literal notranslate"><span class="pre">CORE</span></code>, <code class="docutils literal notranslate"><span class="pre">UNVALIDATED</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--tax_group</span> <span class="pre">GROUP...</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vertebrates</span></code></p></td>
+<td><p>One or more JASPAR taxonomic groups.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--p_value</span> <span class="pre">FLOAT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1e-4</span></code></p></td>
+<td><p>Significance threshold for motif hits.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--log_level</span> <span class="pre">LEVEL</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">INFO</span></code></p></td>
+<td><p>Global flag (before the subcommand): <code class="docutils literal notranslate"><span class="pre">DEBUG</span></code>, <code class="docutils literal notranslate"><span class="pre">INFO</span></code>, <code class="docutils literal notranslate"><span class="pre">WARNING</span></code>, <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="requirements">
+<h2>Requirements<a class="headerlink" href="#requirements" title="Link to this heading"></a></h2>
+<p>Motifs are fetched from JASPAR via the optional <strong><code class="docutils literal notranslate"><span class="pre">pyjaspar</span></code></strong> package (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">pyjaspar</span></code>). MOODS (a core dependency) performs the scanning.</p>
+</section>
+<section id="how-it-works">
+<h2>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading"></a></h2>
+<p>Scanning is performed with MOODS:</p>
+<ol class="arabic simple">
+<li><p>Each motif’s count matrix is converted to a <strong>log-odds matrix</strong> against a flat background (with a small pseudocount), and its <strong>reverse complement</strong> is added so both strands are scanned.</p></li>
+<li><p>A per-motif <strong>score threshold</strong> is derived from <code class="docutils literal notranslate"><span class="pre">--p_value</span></code> with <code class="docutils literal notranslate"><span class="pre">MOODS.tools.threshold_from_p</span></code>.</p></li>
+<li><p>For each region, the reference sequence is read from the FASTA and scanned with MOODS; every hit at or above the threshold is reported.</p></li>
+</ol>
+<p>For a hit at sequence position <em>p</em> (0-based) of a motif of width <em>w</em> in a region starting at genomic coordinate <em>s</em>, the reported interval is <code class="docutils literal notranslate"><span class="pre">[s</span> <span class="pre">+</span> <span class="pre">p,</span> <span class="pre">s</span> <span class="pre">+</span> <span class="pre">p</span> <span class="pre">+</span> <span class="pre">w)</span></code>, with strand <code class="docutils literal notranslate"><span class="pre">+</span></code> for the forward matrix and <code class="docutils literal notranslate"><span class="pre">-</span></code> for the reverse complement.</p>
+</section>
+<section id="output">
+<h2>Output<a class="headerlink" href="#output" title="Link to this heading"></a></h2>
+<p>A 6-column BED file, one line per hit:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">chrom</span>    <span class="n">start</span>    <span class="n">end</span>    <span class="n">motif</span>    <span class="n">score</span>    <span class="n">strand</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">motif</span></code></strong> — the motif label (<code class="docutils literal notranslate"><span class="pre">&lt;matrix_id&gt;.&lt;name&gt;</span></code>, e.g. <code class="docutils literal notranslate"><span class="pre">MA0139.1.CTCF</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">score</span></code></strong> — the MOODS log-odds bitscore of the match (higher is a better match).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">strand</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">+</span></code> (forward matrix) or <code class="docutils literal notranslate"><span class="pre">-</span></code> (reverse complement).</p></li>
+</ul>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Scan peaks against JASPAR CORE vertebrate motifs</span>
+deamtools<span class="w"> </span>match<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fasta<span class="w"> </span>hg38.fa<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--regions<span class="w"> </span>peaks.bed<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>results<span class="w"> </span>--out_name<span class="w"> </span>mpbs
+
+<span class="c1"># Stricter threshold, explicit collection / taxonomic group</span>
+deamtools<span class="w"> </span>match<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fasta<span class="w"> </span>hg38.fa<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--regions<span class="w"> </span>peaks.bed<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--collection<span class="w"> </span>CORE<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--tax_group<span class="w"> </span>vertebrates<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--p_value<span class="w"> </span>1e-5<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>results<span class="w"> </span>--out_name<span class="w"> </span>mpbs
+</pre></div>
+</div>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Restricting <code class="docutils literal notranslate"><span class="pre">--regions</span></code> to accessible peaks keeps the output to plausible binding sites and is much faster than scanning the whole genome.</p></li>
+<li><p>The BED <code class="docutils literal notranslate"><span class="pre">score</span></code> column holds the raw MOODS bitscore (not rescaled to 0–1000), which downstream footprinting can use directly.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="qc.html" class="btn btn-neutral float-left" title="qc" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="footprint.html" class="btn btn-neutral float-right" title="footprint" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Zhijian Li.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

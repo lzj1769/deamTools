@@ -1,0 +1,325 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>footprint &mdash; DeamTools</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=a7ae4c86" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Algorithm" href="../algorithm.html" />
+    <link rel="prev" title="match" href="match.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            DeamTools
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#install-deamtools">Install DeamTools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#python-dependencies">Python dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#verify-installation">Verify installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#running-tests">Running tests</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Commands</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="index.html">index</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="index.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#arguments">Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="align.html">align</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="align.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="bam2bw.html">bam2bw</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="bam2fragment.html">bam2fragment</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#output-format">Output format</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="qc.html">qc</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#metrics">Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="match.html">match</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="match.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">footprint</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../algorithm.html">Algorithm</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#biological-basis">Biological basis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#strand-convention">Strand convention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#deamination-aware-alignment-index-align">Deamination-aware alignment (<code class="docutils literal notranslate"><span class="pre">index</span></code> + <code class="docutils literal notranslate"><span class="pre">align</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#edit-detection-conventions">Edit detection conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#signal-generation-bam2bw">Signal generation (<code class="docutils literal notranslate"><span class="pre">bam2bw</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#enzyme-sequence-bias">Enzyme sequence bias</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#parallelism-and-output">Parallelism and output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#complexity">Complexity</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-align-index"><code class="docutils literal notranslate"><span class="pre">deamtools.align.index</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-align-align"><code class="docutils literal notranslate"><span class="pre">deamtools.align.align</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-preprocessing-bam2bw"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2bw</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-preprocessing-bam2fragment"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2fragment</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-qc"><code class="docutils literal notranslate"><span class="pre">deamtools.qc</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-motif-match"><code class="docutils literal notranslate"><span class="pre">deamtools.motif.match</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-footprint"><code class="docutils literal notranslate"><span class="pre">deamtools.footprint</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-utils"><code class="docutils literal notranslate"><span class="pre">deamtools.utils</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">DeamTools</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">footprint</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/usage/footprint.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="footprint">
+<h1>footprint<a class="headerlink" href="#footprint" title="Link to this heading"></a></h1>
+<p>Score transcription-factor footprints at a set of motif sites using a per-base editing BigWig. A bound factor shields its motif from deaminase editing, so a footprint appears as a local depletion of signal at the motif relative to its flanks.</p>
+<section id="synopsis">
+<h2>Synopsis<a class="headerlink" href="#synopsis" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">deamtools</span> <span class="n">footprint</span> <span class="o">--</span><span class="n">bigwig</span> <span class="n">FILE</span> <span class="o">--</span><span class="n">regions</span> <span class="n">FILE</span> <span class="o">--</span><span class="n">out_dir</span> <span class="n">DIR</span> <span class="o">--</span><span class="n">out_name</span> <span class="n">NAME</span> <span class="p">[</span><span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="required-inputs">
+<h2>Required inputs<a class="headerlink" href="#required-inputs" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--bigwig</span> <span class="pre">FILE</span></code></p></td>
+<td><p>Per-base editing BigWig, e.g. produced by <a class="reference internal" href="bam2bw.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">deamtools</span> <span class="pre">bam2bw</span></code></span></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--regions</span> <span class="pre">FILE</span></code></p></td>
+<td><p>BED of motif sites to score (e.g. from <a class="reference internal" href="match.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">deamtools</span> <span class="pre">match</span></code></span></a>). Column 4, if present, is carried through as the site name.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--out_dir</span> <span class="pre">DIR</span></code></p></td>
+<td><p>Output directory. Created automatically if it does not exist.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--out_name</span> <span class="pre">NAME</span></code></p></td>
+<td><p>Base name (without extension) for the output. Writes <code class="docutils literal notranslate"><span class="pre">&lt;out_dir&gt;/&lt;out_name&gt;.bed</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="optional-arguments">
+<h2>Optional arguments<a class="headerlink" href="#optional-arguments" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--n_shuffles</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1000</span></code></p></td>
+<td><p>Permutations used to build the footprint p-value null (only computed for sites with a positive score).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--threads</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+<td><p>Number of threads; chromosomes are scored in parallel.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--seed</span> <span class="pre">INT</span></code></p></td>
+<td><p><em>(unseeded)</em></p></td>
+<td><p>RNG seed for reproducible p-values.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--log_level</span> <span class="pre">LEVEL</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">INFO</span></code></p></td>
+<td><p>Global flag (before the subcommand): <code class="docutils literal notranslate"><span class="pre">DEBUG</span></code>, <code class="docutils literal notranslate"><span class="pre">INFO</span></code>, <code class="docutils literal notranslate"><span class="pre">WARNING</span></code>, <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="how-it-works">
+<h2>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading"></a></h2>
+<p>For a motif site of width <code class="docutils literal notranslate"><span class="pre">L</span> <span class="pre">=</span> <span class="pre">end</span> <span class="pre">−</span> <span class="pre">start</span></code>, the per-base signal is read over the <code class="docutils literal notranslate"><span class="pre">3</span> <span class="pre">×</span> <span class="pre">L</span></code> window <code class="docutils literal notranslate"><span class="pre">[start</span> <span class="pre">−</span> <span class="pre">L,</span> <span class="pre">end</span> <span class="pre">+</span> <span class="pre">L)</span></code> and split into three equal parts:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span> <span class="n">left</span> <span class="n">flank</span> <span class="p">][</span> <span class="n">motif</span> <span class="n">centre</span> <span class="p">][</span> <span class="n">right</span> <span class="n">flank</span> <span class="p">]</span>
+  <span class="n">L</span> <span class="n">bases</span>        <span class="n">L</span> <span class="n">bases</span>          <span class="n">L</span> <span class="n">bases</span>
+</pre></div>
+</div>
+<p>The footprint score is</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>fp_score = mean(left flank) + mean(right flank) − mean(centre)
+</pre></div>
+</div>
+<p>so a depleted centre flanked by high signal yields a positive score. For sites with a positive score, the per-base values in the window are permuted <code class="docutils literal notranslate"><span class="pre">--n_shuffles</span></code> times to form a null distribution, and the p-value is <code class="docutils literal notranslate"><span class="pre">(#permutations</span> <span class="pre">with</span> <span class="pre">score</span> <span class="pre">≥</span> <span class="pre">observed</span> <span class="pre">+</span> <span class="pre">1)</span> <span class="pre">/</span> <span class="pre">(n_shuffles</span> <span class="pre">+</span> <span class="pre">1)</span></code>. Sites with a non-positive score are assigned <code class="docutils literal notranslate"><span class="pre">p_value</span> <span class="pre">=</span> <span class="pre">1.0</span></code> without permutation.</p>
+<p>Sites whose <code class="docutils literal notranslate"><span class="pre">3</span> <span class="pre">×</span> <span class="pre">L</span></code> window would extend beyond the chromosome ends (or are absent from the BigWig header) are skipped.</p>
+</section>
+<section id="output">
+<h2>Output<a class="headerlink" href="#output" title="Link to this heading"></a></h2>
+<p>A BED-like, tab-delimited file with one line per scored site:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">chrom</span>    <span class="n">start</span>    <span class="n">end</span>    <span class="n">name</span>    <span class="n">fp_score</span>    <span class="n">p_value</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">fp_score</span></code></strong> — the footprint score (higher = stronger depletion at the motif).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">p_value</span></code></strong> — permutation p-value (small = significant footprint).</p></li>
+</ul>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Score motif sites from `match` against a bam2bw track</span>
+deamtools<span class="w"> </span>footprint<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bigwig<span class="w"> </span>sample.bw<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--regions<span class="w"> </span>mpbs.bed<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>results<span class="w"> </span>--out_name<span class="w"> </span>footprints
+
+<span class="c1"># Reproducible p-values, 8 threads</span>
+deamtools<span class="w"> </span>footprint<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bigwig<span class="w"> </span>sample.bw<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--regions<span class="w"> </span>mpbs.bed<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--seed<span class="w"> </span><span class="m">0</span><span class="w"> </span>--threads<span class="w"> </span><span class="m">8</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>results<span class="w"> </span>--out_name<span class="w"> </span>footprints
+</pre></div>
+</div>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Use a <strong>count</strong>-mode BigWig (raw or normalized); the score is scale-aware, so normalized tracks are fine for comparing across samples.</p></li>
+<li><p>Filtering the output by <code class="docutils literal notranslate"><span class="pre">p_value</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">&lt;</span> <span class="pre">0.001</span></code>) gives the set of confidently bound sites.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="match.html" class="btn btn-neutral float-left" title="match" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../algorithm.html" class="btn btn-neutral float-right" title="Algorithm" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Zhijian Li.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
