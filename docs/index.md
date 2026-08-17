@@ -72,6 +72,7 @@ DeamTools is organised as a set of subcommands, run as `deamtools <command>`:
 | [`qc`](usage/qc.md) | Quality-control metrics — including the deaminase sequence-motif logo — in a self-contained HTML report. |
 | [`match`](usage/match.md) | Scan regions for TF motif matches (MOODS) and write a BED of binding sites. |
 | [`footprint`](usage/footprint.md) | Score TF footprints at motif sites from a BigWig (flank-vs-centre depletion). |
+| [`seq2edit`](usage/seq2edit.md) | Train a CNN that maps DNA sequence to per-base editing (the deaminase sequence bias). |
 
 ## Workflow
 
@@ -171,6 +172,7 @@ usage/bam2fragment
 usage/qc
 usage/match
 usage/footprint
+usage/seq2edit
 ```
 
 ```{toctree}

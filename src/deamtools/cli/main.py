@@ -12,6 +12,7 @@ from deamtools.motif.match import run_motif_matching
 from deamtools.preprocessing.bam2bw import run_bam2bw
 from deamtools.preprocessing.bam2fragment import run_bam2fragment
 from deamtools.qc import run_qc
+from deamtools.seq2edit import run_train
 from deamtools.utils import get_version
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_qc_parser(subparsers)
     _add_match_parser(subparsers)
     _add_footprint_parser(subparsers)
+    _add_seq2edit_parser(subparsers)
 
     return parser
 
@@ -799,6 +801,215 @@ def _add_footprint_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_run_footprint)
 
 
+def _add_seq2edit_parser(subparsers: argparse._SubParsersAction) -> None:
+    parser = subparsers.add_parser(
+        "seq2edit",
+        help=(
+            "Sequence-to-edit CNN bias model: learn a DNA-sequence -> per-base "
+            "editing map for bias correction."
+        ),
+        description=(
+            "Model the deaminase sequence bias by learning a map from one-hot\n"
+            "DNA to per-base editing signal (after ACCESS-ATAC's cnn_bias_model).\n"
+            "\n"
+            "Trained on an editing-signal BigWig from a naked/deproteinised-DNA\n"
+            "control, the model predicts the editing a sequence would receive on\n"
+            "the basis of enzyme preference alone -- the 'expected' track that\n"
+            "downstream footprint/occupancy analyses divide out.\n"
+            "\n"
+            "Sub-commands:\n"
+            "  train       Fit the CNN bias model on DNA windows + a BigWig.\n"
+            "  predict     (planned) Score new sequences to an expected track.\n"
+            "  interpret   (planned) Attribute predictions back to sequence."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    seq2edit_subparsers = parser.add_subparsers(
+        dest="seq2edit_command",
+        metavar="<subcommand>",
+        required=True,
+        help="seq2edit subcommand (see 'deamtools seq2edit <subcommand> --help')",
+    )
+    _add_seq2edit_train_parser(seq2edit_subparsers)
+
+
+def _add_seq2edit_train_parser(subparsers: argparse._SubParsersAction) -> None:
+    parser = subparsers.add_parser(
+        "train",
+        help="Train the seq2edit CNN bias model on DNA windows and a BigWig.",
+        description=(
+            "Train a CNN to predict per-base editing signal from one-hot DNA.\n"
+            "\n"
+            "Regions in --train_regions are tiled into fixed --seq_len windows;\n"
+            "each window's reference sequence is the input and the per-base\n"
+            "--bigwig signal over the same coordinates is the target. The model\n"
+            "(EditNet) predicts a per-base Poisson rate and is fit with a Poisson\n"
+            "NLL loss and Adam (ACCESS-ATAC defaults); the best validation\n"
+            "checkpoint is written to <out_dir>/<out_name>.pth.\n"
+            "\n"
+            "Requires the optional 'torch' dependency:\n"
+            "pip install 'deamtools[seq2edit]'."
+        ),
+        epilog=(
+            "examples:\n"
+            "  # Train on naked-DNA editing signal over a set of regions\n"
+            "  deamtools seq2edit train --fasta hg38.fa --bigwig naked.bw \\\n"
+            "      --train_regions regions.bed --out_dir models --out_name bias\n"
+            "\n"
+            "  # Explicit validation regions, larger windows, fewer epochs\n"
+            "  deamtools seq2edit train --fasta hg38.fa --bigwig naked.bw \\\n"
+            "      --train_regions train.bed --valid_regions valid.bed \\\n"
+            "      --seq_len 128 --epochs 50 --out_dir models --out_name bias\n"
+            "\n"
+            "notes:\n"
+            "  * The FASTA must be indexed with 'samtools faidx' (.fai required).\n"
+            "  * The BigWig should come from a naked/deproteinised-DNA control so\n"
+            "    the model captures enzyme sequence bias, not chromatin state.\n"
+            "  * Writes <out_dir>/<out_name>.pth (best-validation checkpoint)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    # Required inputs
+    parser.add_argument(
+        "--fasta",
+        required=True,
+        metavar="FILE",
+        help="Reference FASTA indexed with 'samtools faidx' (.fai required).",
+    )
+    parser.add_argument(
+        "--bigwig",
+        required=True,
+        metavar="FILE",
+        help="Per-base editing-signal BigWig (target); ideally a naked-DNA control.",
+    )
+    parser.add_argument(
+        "--train_regions",
+        required=True,
+        metavar="FILE",
+        help="BED file of regions to tile into training windows.",
+    )
+    parser.add_argument(
+        "--out_dir",
+        required=True,
+        metavar="DIR",
+        help="Output directory. Created if it does not exist.",
+    )
+    parser.add_argument(
+        "--out_name",
+        required=True,
+        metavar="NAME",
+        help="Base name for the checkpoint; writes <out_dir>/<out_name>.pth.",
+    )
+
+    # Optional data
+    parser.add_argument(
+        "--valid_regions",
+        metavar="FILE",
+        help=(
+            "BED file of validation regions. If omitted, a --valid_fraction "
+            "random hold-out of the training windows is used."
+        ),
+    )
+    parser.add_argument(
+        "--valid_fraction",
+        type=float,
+        default=0.1,
+        metavar="FLOAT",
+        help=(
+            "Fraction of training windows held out for validation when "
+            "--valid_regions is not given. Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
+        "--seq_len",
+        type=int,
+        default=128,
+        metavar="INT",
+        help="Window width in bp (model input/output length). Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--step",
+        type=int,
+        default=None,
+        metavar="INT",
+        help=(
+            "Spacing between window starts. Default: --seq_len (non-overlapping). "
+            "Smaller values oversample with overlapping windows."
+        ),
+    )
+
+    # Architecture
+    parser.add_argument(
+        "--n_filters",
+        type=int,
+        default=32,
+        metavar="INT",
+        help="Convolutional filters per conv block. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--kernel_size",
+        type=int,
+        default=5,
+        metavar="INT",
+        help="Convolution kernel width. Default: %(default)s.",
+    )
+
+    # Optimisation
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=200,
+        metavar="INT",
+        help="Number of training epochs. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=512,
+        metavar="INT",
+        help="Mini-batch size. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=3e-4,
+        metavar="FLOAT",
+        help="Adam learning rate. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--weight_decay",
+        type=float,
+        default=1e-4,
+        metavar="FLOAT",
+        help="Adam weight decay (L2). Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=0,
+        metavar="INT",
+        help="DataLoader worker processes. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        metavar="INT",
+        help="Random seed for reproducibility. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--device",
+        metavar="STR",
+        help=(
+            "Compute device ('cpu', 'cuda', 'mps'). Default: auto-detect "
+            "(CUDA, then Apple MPS, then CPU)."
+        ),
+    )
+
+    parser.set_defaults(func=_run_seq2edit_train)
+
+
 def _run_index(args: argparse.Namespace) -> int:
     _log_invocation(args)
     run_index(
@@ -891,6 +1102,31 @@ def _run_match(args: argparse.Namespace) -> int:
         collection=args.collection,
         tax_group=args.tax_group,
         p_value=args.p_value,
+    )
+    return 0
+
+
+def _run_seq2edit_train(args: argparse.Namespace) -> int:
+    _log_invocation(args)
+    run_train(
+        fasta_path=args.fasta,
+        bigwig_path=args.bigwig,
+        train_regions=args.train_regions,
+        out_dir=args.out_dir,
+        out_name=args.out_name,
+        valid_regions=args.valid_regions,
+        valid_fraction=args.valid_fraction,
+        seq_len=args.seq_len,
+        step=args.step,
+        n_filters=args.n_filters,
+        kernel_size=args.kernel_size,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        num_workers=args.num_workers,
+        seed=args.seed,
+        device=args.device,
     )
     return 0
 
