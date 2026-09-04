@@ -44,6 +44,21 @@ GA_TABLE = str.maketrans("Gg", "Aa")
 RC_TABLE = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 CIGAR_OP_RE = re.compile(r"(\d+)([MIDNSHP=X])")
 
+# BWA-MEM options, matching bwa-meth 0.2.9 (`bwameth.py:bwa_mem`). A three-letter
+# alignment leaves residual mismatches wherever the conversion runs the wrong way
+# — for a dsDNA deaminase that is the minority-direction editing every read
+# carries — so the defaults are miscalibrated for this data:
+#   -T 40   raise the minimum output score (with -B 2 a good alignment scores high)
+#   -B 2    halve the mismatch penalty; residual edits should not sink a read
+#   -L 10   raise the clipping penalty, so bwa resolves rather than clips them
+#   -M      mark shorter split hits as secondary
+#   -C      carry the YS/YC comment through into the SAM (deamtools relies on it)
+#   -U 100  (paired) heavily penalise unpaired placement
+# Keeping these identical to bwa-meth's also makes the two directly comparable:
+# any difference is then the read-conversion strategy, not parameter tuning.
+BWA_MEM_OPTS = ("-T", "40", "-B", "2", "-L", "10", "-C", "-M")
+BWA_MEM_PAIRED_OPTS = ("-U", "100")
+
 
 def _check_executable(name: str) -> None:
     if shutil.which(name) is None:
@@ -301,9 +316,9 @@ def run_align(
 
     os.makedirs(out_dir, exist_ok=True)
 
-    bwa_cmd = ["bwa", "mem", "-C", "-t", str(threads)]
+    bwa_cmd = ["bwa", "mem", *BWA_MEM_OPTS, "-t", str(threads)]
     if paired:
-        bwa_cmd += ["-p"]
+        bwa_cmd += [*BWA_MEM_PAIRED_OPTS, "-p"]
     if read_group is not None:
         bwa_cmd += ["-R", read_group]
     bwa_cmd += [converted_path, "-"]
