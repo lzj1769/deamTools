@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -12,9 +13,27 @@ from deamtools.utils import (
     _load_regions,
     get_chrom_sizes_from_bam,
     get_chrom_sizes_from_file,
+    iter_fragments,
+    merge_fragment_bases,
 )
 
 logger = logging.getLogger(__name__)
+
+
+_ACGT = frozenset("ACGT")
+
+
+def _passes_filters(read: pysam.AlignedSegment, min_mapq: int) -> bool:
+    """Primary, non-duplicate, mapping-quality-passing read?"""
+    if (
+        read.is_unmapped
+        or read.is_duplicate
+        or read.is_qcfail
+        or read.is_secondary
+        or read.is_supplementary
+    ):
+        return False
+    return read.mapping_quality >= min_mapq
 
 
 def _get_edit_count(
@@ -26,8 +45,9 @@ def _get_edit_count(
     extend_size: int,
     min_mapq: int,
     min_baseq: int,
-) -> np.ndarray:
-    """Tally per-base deamination edit counts in a genomic region.
+    want_coverage: bool = False,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """Tally per-base deamination edit counts, and coverage, in a region.
 
     Iterates every primary, non-duplicate aligned read overlapping
     ``[start, end)`` on ``chrom`` and counts deamination events at each
@@ -36,6 +56,14 @@ def _get_edit_count(
     deamination patterns: ``C -> T`` or ``G -> A``. The check is
     strand-agnostic: the same mismatch pattern is counted regardless of
     whether the read maps to the forward or reverse strand.
+
+    Counting is per **fragment**, not per record. Records are grouped with
+    :func:`~deamtools.utils.iter_fragments` and each fragment's mates are
+    collapsed by :func:`~deamtools.utils.merge_fragment_bases`, so a
+    reference position that both mates cover contributes one event and one
+    unit of coverage rather than two -- mates overlap whenever the insert is
+    shorter than twice the read length, and that overlap is the middle of
+    the fragment, not a random subset of positions.
 
     When ``extend_size > 0`` each event is broadcast symmetrically into a
     window of width ``2 * extend_size + 1`` around the editing site
@@ -61,12 +89,20 @@ def _get_edit_count(
     min_baseq : int
         Skip individual read bases whose quality is strictly below this
         value.
+    want_coverage : bool, default False
+        Also return per-base fragment coverage (positions where the merged
+        fragment called an A, C, G or T). Computed in the same pass, so the
+        numerator and denominator of a ratio always see the same fragments;
+        skipped when not needed, since it is a write per aligned base.
 
     Returns
     -------
-    numpy.ndarray
+    signal : numpy.ndarray
         1-D ``float32`` array of length ``end - start``. Each entry is the
         number of deamination events at that base within the region.
+    coverage : numpy.ndarray or None
+        Same shape, giving per-base ACGT fragment coverage; ``None`` unless
+        ``want_coverage``.
 
     Notes
     -----
@@ -77,87 +113,34 @@ def _get_edit_count(
     """
     width = end - start
     signal = np.zeros(width, dtype=np.float32)
+    coverage = np.zeros(width, dtype=np.float32) if want_coverage else None
     ref_seq = fasta.fetch(chrom, start, end).upper()
 
-    for read in bam.fetch(reference=chrom, start=start, end=end):
-        if (
-            read.is_unmapped
-            or read.is_duplicate
-            or read.is_qcfail
-            or read.is_secondary
-            or read.is_supplementary
-        ):
-            continue
-        if read.mapping_quality < min_mapq:
-            continue
+    def passing_reads() -> Iterator[pysam.AlignedSegment]:
+        for read in bam.fetch(reference=chrom, start=start, end=end):
+            if _passes_filters(read, min_mapq):
+                yield read
 
-        seq = read.query_sequence
-        if seq is None:
-            continue
-        quals = read.query_qualities
+    for fragment in iter_fragments(passing_reads()):
+        bases = merge_fragment_bases(fragment, min_baseq, start, end)
+        for ref_pos, read_base in bases.items():
+            idx = ref_pos - start
 
-        for query_pos, ref_pos in read.get_aligned_pairs(matches_only=True):
-            if ref_pos < start or ref_pos >= end:
-                continue
-            if quals is not None and quals[query_pos] < min_baseq:
-                continue
+            if coverage is not None and read_base in _ACGT:
+                coverage[idx] += 1
 
-            ref_base = ref_seq[ref_pos - start]
-            read_base = seq[query_pos]
-
+            ref_base = ref_seq[idx]
             if (ref_base == "C" and read_base == "T") or (
                 ref_base == "G" and read_base == "A"
             ):
                 if extend_size > 0:
-                    lo = max(0, ref_pos - start - extend_size)
-                    hi = min(ref_pos - start + extend_size + 1, width)
+                    lo = max(0, idx - extend_size)
+                    hi = min(idx + extend_size + 1, width)
                     signal[lo:hi] += 1
                 else:
-                    signal[ref_pos - start] += 1
+                    signal[idx] += 1
 
-    return signal
-
-
-def _get_total_coverage(
-    bam: pysam.AlignmentFile,
-    chrom: str,
-    start: int,
-    end: int,
-    min_baseq: int,
-) -> np.ndarray:
-    """Per-base total read coverage in a genomic region.
-
-    Uses :meth:`pysam.AlignmentFile.count_coverage` to sum the per-base
-    counts of A, C, G, and T across all reads overlapping ``[start, end)``.
-    Reads flagged as unmapped, duplicate, QC-fail, secondary, or
-    supplementary are excluded by pysam's default filter mask.
-
-    Parameters
-    ----------
-    bam : pysam.AlignmentFile
-        Open BAM handle.
-    chrom : str
-        Chromosome name.
-    start, end : int
-        Half-open ``[start, end)`` interval on ``chrom``.
-    min_baseq : int
-        Per-base quality threshold forwarded to ``count_coverage`` (bases
-        with quality strictly below this value are not counted).
-
-    Returns
-    -------
-    numpy.ndarray
-        1-D ``float32`` array of length ``end - start`` giving the total
-        ACGT read coverage at each base in the region.
-    """
-    width = end - start
-    a, c, g, t = bam.count_coverage(chrom, start, end, quality_threshold=min_baseq)
-    cov = np.array(a, dtype=np.float32)
-    cov += np.array(c, dtype=np.float32)
-    cov += np.array(g, dtype=np.float32)
-    cov += np.array(t, dtype=np.float32)
-    assert cov.shape[0] == width
-    return cov
+    return signal, coverage
 
 
 def _signal_for_region(
@@ -174,8 +157,7 @@ def _signal_for_region(
 ) -> tuple[str, int, int, np.ndarray]:
     """Compute the per-base signal for a single genomic region.
 
-    Wraps :func:`_get_edit_count` (and, in ratio mode,
-    :func:`_get_total_coverage`) so the result can be dispatched to a
+    Wraps :func:`_get_edit_count` so the result can be dispatched to a
     worker thread. The returned tuple includes the input coordinates so
     the orchestrator can assemble outputs in BigWig-sorted order
     independent of completion order.
@@ -211,7 +193,7 @@ def _signal_for_region(
         pysam.AlignmentFile(bam_path, "rb") as bam,
         pysam.FastaFile(fasta_path) as fasta,
     ):
-        edits = _get_edit_count(
+        edits, coverage = _get_edit_count(
             bam=bam,
             fasta=fasta,
             chrom=chrom,
@@ -220,18 +202,13 @@ def _signal_for_region(
             extend_size=extend_size if mode == "count" else 0,
             min_mapq=min_mapq,
             min_baseq=min_baseq,
+            want_coverage=mode == "ratio",
         )
 
         if mode == "count":
             return chrom, start, end, edits
 
-        coverage = _get_total_coverage(
-            bam=bam,
-            chrom=chrom,
-            start=start,
-            end=end,
-            min_baseq=min_baseq,
-        )
+        assert coverage is not None  # set whenever want_coverage was requested
         coverage = np.where(coverage < min_coverage, 0.0, coverage)
 
         signal = np.zeros_like(edits)
@@ -269,6 +246,15 @@ def run_bam2bw(
     ``--extend_size`` applies only in count mode; the fraction mode
     denominator is the total ACGT coverage with positions below
     ``min_coverage`` masked to zero.
+
+    Both the edit count and the ratio denominator are per **fragment**: the
+    mates of a pair are merged before counting, so a reference position that
+    both mates cover contributes once, not twice. Numerator and denominator
+    are computed in the same pass over the same fragments, and both honour
+    ``min_mapq`` -- before 2026-09-10 the denominator came from
+    ``count_coverage``, which applies no mapping-quality filter, so ratio mode
+    was dividing edits from MAPQ-passing reads by coverage that included reads
+    the numerator had excluded.
 
     Parameters
     ----------
@@ -342,7 +328,7 @@ def run_bam2bw(
 
     See Also
     --------
-    _count_deamination_on_chrom : Per-chromosome counter used internally.
+    _get_edit_count : Per-region fragment counter used internally.
     _load_regions : BED loader used to restrict processing.
     """
     if mode not in ("count", "ratio"):

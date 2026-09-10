@@ -52,12 +52,26 @@ Two strand conventions are used, depending on the command:
 
 Reads flagged unmapped, duplicate, QC-fail, secondary, or supplementary are always excluded, then `min_mapq` is applied per read; `min_baseq` gates individual bases.
 
+### Mates are merged before counting
+
+`bam2bw` and `qc` count per **fragment**, not per alignment record. Whenever the insert is shorter than twice the read length the two mates overlap, and every reference position in that overlap is reported by both of them — one position on one molecule, seen twice. Records are therefore grouped by read name and each fragment's mates are collapsed into one `reference position → base` map before anything is tallied, so an overlapping position contributes once.
+
+Where the mates disagree at an overlap, the **higher base quality wins**: library prep turns the deaminated C into a real T:A pair that both strands carry, so the two mates are expected to agree and a disagreement means one of them misread.
+
+This is not a rounding detail. On `data/ACCESS-ATAC/chr10.bam` the overlap accounted for **24.5%** of `qc`'s editing opportunities and **21.2%** of `bam2bw`'s count-mode signal. Because the overlap is the middle of the fragment rather than a random subset of positions, counting it twice biased every rate derived from it rather than merely inflating the totals.
+
+Records whose mate never arrives — unpaired reads, a mate that was unmapped, filtered out, or placed on another contig — are counted as one-record fragments, so nothing is dropped. Single-end data is unaffected: one record is one fragment.
+
+`bam2fragment` has always worked per fragment (it merges the mates' editing positions into a set), though strand-aware rather than strand-agnostic.
+
 ## Signal generation (`bam2bw`)
 
 For each region (whole chromosome or a merged BED interval) the reference is fetched once and reads are streamed via the BAM index.
 
 - **count mode** — a per-base count of edits. With `--extend_size E > 0`, each event is broadcast symmetrically into a window of width `2E + 1` (clipped to the region), so the value at a base is the number of events within `E` bp.
 - **ratio mode** — `edit_count / total_ACGT_coverage` at each base; positions whose total coverage is below `--min_coverage` are written as `0`. `--extend_size` is ignored in this mode.
+
+Both are per fragment. The denominator is counted in the same pass as the numerator, over the same merged fragments, so the two cannot disagree about which reads they saw — and it now honours `--min_mapq`. Before 2026-09-10 the denominator came from pysam's `count_coverage`, which applies no mapping-quality filter, so ratio mode was dividing edits from MAPQ-passing reads by coverage that included reads the numerator had excluded.
 
 BED intervals are merged before counting so a read spanning an overlap is not double-counted:
 

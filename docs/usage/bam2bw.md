@@ -2,6 +2,8 @@
 
 Convert a coordinate-sorted BAM file to a BigWig track of per-base C→T deamination counts.
 
+Signal is counted **per fragment**, not per alignment record: for paired-end data the two mates are merged before counting, so a reference position that both mates cover contributes once instead of twice, and the higher base quality settles a disagreement between them. In `--mode ratio` the denominator is counted the same way, in the same pass, and honours `--min_mapq`. See [Algorithm](../algorithm.md#mates-are-merged-before-counting) for why this matters — on real ACCESS-ATAC data the mate overlap was 21% of the count-mode signal.
+
 ## Synopsis
 
 ```

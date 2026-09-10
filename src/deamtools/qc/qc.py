@@ -11,7 +11,7 @@ metrics most useful for judging a deaminase footprinting experiment:
   is the primary signal that the deaminase treatment worked.
 
   Editing is counted **per fragment, not per record**: the two mates of a pair
-  are merged first (:func:`_fragment_bases`), so a reference position both mates
+  are merged first (:func:`~deamtools.utils.merge_fragment_bases`), so a reference position both mates
   cover is one observation rather than two. Where the mates disagree — which at
   an overlap means a sequencing error, since library prep turns a deaminated C
   into a real T:A pair that both mates then carry — the higher base quality
@@ -58,7 +58,12 @@ from typing import NamedTuple
 import numpy as np
 import pysam
 
-from deamtools.utils import get_chrom_sizes_from_bam
+from deamtools.utils import (
+    Fragment,
+    get_chrom_sizes_from_bam,
+    iter_fragments,
+    merge_fragment_bases,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +88,6 @@ _BASE_IDX = {"A": 0, "C": 1, "G": 2, "T": 3}
 
 # Fixed so that subsampled QC runs are reproducible without another CLI flag.
 _SAMPLE_KEY = b"deamtools-qc-20260910"
-
-# Stand-in quality for a record with no QUAL string at all ("*"), which should
-# not be filtered out by --min_baseq; 255 is the SAM "unavailable" value.
-_NO_QUAL = 255
 
 
 def _revcomp(seq: str) -> str:
@@ -177,38 +178,9 @@ def _keep_fragment(qname: str, fraction: float) -> bool:
     return int.from_bytes(digest, "big") < fraction * (1 << 64)
 
 
-def _fragment_bases(
-    reads: tuple[pysam.AlignedSegment, ...],
-    min_baseq: int,
-) -> dict[int, str]:
-    """Merge the mates of one fragment into ``reference position -> called base``.
-
-    Where the mates overlap they are reporting the same duplex -- library prep
-    turns a deaminated C into a real T:A pair, so both mates carry the event --
-    so an overlapping position is *one* observation, not two. Counting it twice
-    is what per-record accumulation used to do. The higher base quality wins a
-    disagreement, which at an overlap is by definition a sequencing error in one
-    of the two mates.
-    """
-    best: dict[int, tuple[str, int]] = {}
-    for read in reads:
-        seq = read.query_sequence
-        if seq is None:
-            continue
-        quals = read.query_qualities
-        for qpos, rpos in read.get_aligned_pairs(matches_only=True):
-            qual = quals[qpos] if quals is not None else _NO_QUAL
-            if qual < min_baseq:
-                continue
-            previous = best.get(rpos)
-            if previous is None or qual > previous[1]:
-                best[rpos] = (seq[qpos], qual)
-    return {rpos: base for rpos, (base, _) in best.items()}
-
-
 def _accumulate_fragment(
     stats: _Stats,
-    reads: tuple[pysam.AlignedSegment, ...],
+    reads: Fragment,
     ref_seq: str,
     ref_len: int,
     min_baseq: int,
@@ -218,7 +190,7 @@ def _accumulate_fragment(
     if len(reads) > 1:
         stats.fragments_from_pairs += 1
 
-    bases = _fragment_bases(reads, min_baseq)
+    bases = merge_fragment_bases(reads, min_baseq)
 
     frag_edits = 0
     frag_editable = 0  # distinct reference C/G covered (strand-agnostic)
@@ -293,15 +265,6 @@ def _accumulate_fragment(
         stats.edit_rate_n += 1
 
 
-def _mergeable(read: pysam.AlignedSegment) -> bool:
-    """Can this record's mate be paired with it inside this chromosome's pass?"""
-    return (
-        read.is_paired
-        and not read.mate_is_unmapped
-        and read.next_reference_id == read.reference_id
-    )
-
-
 def _process_chrom(
     bam_path: str,
     fasta_path: str,
@@ -332,47 +295,39 @@ def _process_chrom(
         ref_seq = fasta.fetch(chrom).upper()
         ref_len = len(ref_seq)
 
-        # query_name -> the mate seen first, waiting for its partner.
-        pending: dict[str, pysam.AlignedSegment] = {}
-
-        for read in bam.fetch(chrom):
-            qname = read.query_name or ""
-            if subsampling and not _keep_fragment(qname, sample_fraction):
-                continue
-            stats.total += 1
-            if read.is_unmapped:
-                stats.unmapped += 1
-            if read.is_duplicate:
-                stats.duplicate += 1
-            if read.is_secondary:
-                stats.secondary += 1
-            if read.is_supplementary:
-                stats.supplementary += 1
-
-            if not _passes_filters(read, min_mapq):
-                continue
-            stats.passing += 1
-
-            # Fragment length from properly-paired read1 only (avoid double count).
-            if read.is_proper_pair:
-                stats.proper_pair += 1
-                if read.is_read1 and read.template_length:
-                    flen = min(abs(read.template_length), _MAX_FRAGLEN)
-                    stats.fraglen[flen] += 1
-
-            if _mergeable(read):
-                mate = pending.pop(qname, None)
-                if mate is None:
-                    pending[qname] = read
+        def passing_reads() -> Iterator[pysam.AlignedSegment]:
+            """Record-level bookkeeping, yielding only what reaches a fragment."""
+            for read in bam.fetch(chrom):
+                if subsampling and not _keep_fragment(
+                    read.query_name or "", sample_fraction
+                ):
                     continue
-                _accumulate_fragment(stats, (mate, read), ref_seq, ref_len, min_baseq)
-            else:
-                _accumulate_fragment(stats, (read,), ref_seq, ref_len, min_baseq)
+                stats.total += 1
+                if read.is_unmapped:
+                    stats.unmapped += 1
+                if read.is_duplicate:
+                    stats.duplicate += 1
+                if read.is_secondary:
+                    stats.secondary += 1
+                if read.is_supplementary:
+                    stats.supplementary += 1
 
-        # Mates whose partner never showed up: count them as one-record fragments
-        # rather than dropping them, so no passing read goes unaccounted for.
-        for orphan in pending.values():
-            _accumulate_fragment(stats, (orphan,), ref_seq, ref_len, min_baseq)
+                if not _passes_filters(read, min_mapq):
+                    continue
+                stats.passing += 1
+
+                # Fragment length from properly-paired read1 only, so a pair is
+                # counted once.
+                if read.is_proper_pair:
+                    stats.proper_pair += 1
+                    if read.is_read1 and read.template_length:
+                        flen = min(abs(read.template_length), _MAX_FRAGLEN)
+                        stats.fraglen[flen] += 1
+
+                yield read
+
+        for fragment in iter_fragments(passing_reads()):
+            _accumulate_fragment(stats, fragment, ref_seq, ref_len, min_baseq)
 
     return stats
 

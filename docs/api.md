@@ -67,6 +67,8 @@ run_bam2bw(
 
 Write a per-base BigWig of deamination signal to `<out_dir>/<out_name>.bw`. `mode="count"` writes raw edit counts (strand-agnostic `C→T` or `G→A`) and honours `extend_size`; `mode="ratio"` writes `edits / total_ACGT_coverage`, masking positions below `min_coverage` to 0. In count mode, `normalize=True` scales every value by `scale_factor / total` so the track sums to `scale_factor` (reads/counts-per-million); ignored in ratio mode.
 
+Both numerator and denominator are counted **per fragment**: the mates of a pair are merged first, so a reference position both mates cover contributes once rather than twice, and the higher base quality settles a disagreement. They are computed in the same pass over the same fragments and both honour `min_mapq`.
+
 ## `deamtools.preprocessing.bam2fragment`
 
 ### `run_bam2fragment`

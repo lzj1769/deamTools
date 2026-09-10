@@ -658,3 +658,127 @@ class TestRatioMode:
         )
         with pyBigWig.open(out) as bw:
             assert bw.stats("chr1", 1, 2, type="mean")[0] == pytest.approx(2.0 / 3.0)
+
+
+# ---------------------------------------------------------------------------
+# Fragment merging (paired-end)
+# ---------------------------------------------------------------------------
+
+
+def _make_pair(name, seq1, seq2, pos1=0, pos2=0, mapq=30, baseq=40):
+    """A proper pair whose two mates can be merged into one fragment."""
+    r1 = _make_read(
+        name, seq1, 0, pos1, mapq=mapq, baseq=baseq, extra_flags=0x1 | 0x2 | 0x40
+    )
+    r1.next_reference_id = 0
+    r1.next_reference_start = pos2
+    r2 = _make_read(
+        name,
+        seq2,
+        0,
+        pos2,
+        mapq=mapq,
+        baseq=baseq,
+        is_reverse=True,
+        extra_flags=0x1 | 0x2 | 0x80,
+    )
+    r2.next_reference_id = 0
+    r2.next_reference_start = pos1
+    return [r1, r2]
+
+
+class TestFragmentMerging:
+    """A position both mates cover is one event, not two.
+
+    REF_SEQ is ACGTCGATCG; position 1 is a reference C. Both mates of a real
+    pair report the same edit there, because library prep turns the deaminated
+    C into a T:A pair that both strands carry.
+    """
+
+    EDITED = "ATGTCGATCG"  # C->T at pos 1
+
+    def _signal(self, bam_path, fasta_file, *, mode="count", min_mapq=0):
+        _, _, _, signal = _signal_for_region(
+            bam_path=bam_path,
+            fasta_path=fasta_file,
+            chrom="chr1",
+            start=0,
+            end=len(REF_SEQ),
+            mode=mode,
+            min_mapq=min_mapq,
+            min_baseq=0,
+            extend_size=0,
+            min_coverage=0,
+        )
+        return signal
+
+    def test_overlapping_mates_count_one_event(self, tmp_path, fasta_file):
+        bam = _write_bam(
+            str(tmp_path / "p.bam"), _make_pair("frag", self.EDITED, self.EDITED)
+        )
+        # Per record this was 2; the mates cover the same position, so it is 1.
+        assert self._signal(bam, fasta_file)[1] == pytest.approx(1.0)
+
+    def test_non_overlapping_mates_both_count(self, tmp_path, fasta_file):
+        # R1 covers 0-4 with the C->T at 1, R2 covers 5-9 with the G->A at 5.
+        reads = _make_pair("frag", "ATGTC", "AATCG", pos1=0, pos2=5)
+        bam = _write_bam(str(tmp_path / "p.bam"), reads)
+        signal = self._signal(bam, fasta_file)
+        assert signal[1] == pytest.approx(1.0)
+        assert signal[5] == pytest.approx(1.0)
+
+    def test_extend_size_broadcasts_the_merged_event_once(self, tmp_path, fasta_file):
+        bam = _write_bam(
+            str(tmp_path / "p.bam"), _make_pair("frag", self.EDITED, self.EDITED)
+        )
+        _, _, _, signal = _signal_for_region(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            chrom="chr1",
+            start=0,
+            end=len(REF_SEQ),
+            mode="count",
+            min_mapq=0,
+            min_baseq=0,
+            extend_size=1,
+            min_coverage=0,
+        )
+        # One event spread over pos 0-2, at height 1 rather than 2.
+        assert signal[0] == pytest.approx(1.0)
+        assert signal[1] == pytest.approx(1.0)
+        assert signal[2] == pytest.approx(1.0)
+        assert signal[3] == 0.0
+
+    def test_ratio_denominator_is_also_per_fragment(self, tmp_path, fasta_file):
+        # One edited fragment (two overlapping mates) plus one unedited single
+        # read. Per record that was 2 edits over 3 reads = 0.667; per fragment
+        # it is 1 edit over 2 fragments = 0.5.
+        reads = _make_pair("frag", self.EDITED, self.EDITED)
+        reads.append(_make_read("solo", REF_SEQ, 0, 0))
+        bam = _write_bam(str(tmp_path / "p.bam"), reads)
+        assert self._signal(bam, fasta_file, mode="ratio")[1] == pytest.approx(0.5)
+
+    def test_ratio_denominator_honours_min_mapq(self, tmp_path, fasta_file):
+        # The old denominator came from count_coverage, which applies no MAPQ
+        # filter, so this low-MAPQ read used to dilute the ratio to 0.5 while
+        # being excluded from the numerator.
+        reads = [
+            _make_read("keep", self.EDITED, 0, 0, mapq=30),
+            _make_read("drop", REF_SEQ, 0, 0, mapq=0),
+        ]
+        bam = _write_bam(str(tmp_path / "p.bam"), reads)
+        ratio = self._signal(bam, fasta_file, mode="ratio", min_mapq=20)
+        assert ratio[1] == pytest.approx(1.0)
+
+    def test_orphaned_mate_still_counts(self, tmp_path, fasta_file):
+        # R2 fails --min_mapq, so R1's partner never arrives; R1 must still be
+        # counted rather than sitting in the buffer.
+        reads = _make_pair("frag", self.EDITED, self.EDITED)
+        reads[1].mapping_quality = 0
+        bam = _write_bam(str(tmp_path / "p.bam"), reads)
+        assert self._signal(bam, fasta_file, min_mapq=20)[1] == pytest.approx(1.0)
+
+    def test_single_end_reads_are_unaffected(self, tmp_path, fasta_file):
+        reads = [_make_read(f"r{i}", self.EDITED, 0, 0) for i in range(3)]
+        bam = _write_bam(str(tmp_path / "s.bam"), reads)
+        assert self._signal(bam, fasta_file)[1] == pytest.approx(3.0)
