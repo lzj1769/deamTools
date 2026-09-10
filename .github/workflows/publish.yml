@@ -1,0 +1,155 @@
+name: Publish
+
+# Publishes to PyPI when the version in pyproject.toml changes on main.
+#
+# Publishing is irreversible: a version can never be re-uploaded, edited or
+# replaced, only yanked. So the version bump is the trigger, and "this version
+# is already on PyPI" is a hard stop that runs first — which makes re-runs,
+# reverts and force-pushes harmless, because the workflow can only ever publish
+# a version that is genuinely new.
+#
+# Authentication uses PyPI trusted publishing (OIDC), so there is no long-lived
+# credential anywhere: GitHub mints a short-lived signed token for this job,
+# PyPI checks its claims against a pre-registered publisher (this repo, this
+# workflow file, the `pypi` environment) and issues an upload token valid for a
+# few minutes and scoped to this project alone. Renaming this file or moving the
+# job out of the `pypi` environment will therefore break publishing until the
+# publisher config on PyPI is updated to match.
+
+on:
+  push:
+    branches: [main]
+  # Manual runs publish whatever version main currently holds, provided it is
+  # not on PyPI yet. This is the escape hatch when a release run failed after
+  # the version bump had already landed.
+  workflow_dispatch:
+
+concurrency:
+  group: publish-pypi
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    name: Decide whether to publish
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      name: ${{ steps.check.outputs.name }}
+      publish: ${{ steps.check.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the pushed range to compare the version against.
+          fetch-depth: 0
+
+      - id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          read_field() {   # read_field <file> <field>
+            python3 -c "
+          import sys, tomllib
+          with open(sys.argv[1], 'rb') as fh:
+              print(tomllib.load(fh)['project'][sys.argv[2]])
+          " "$1" "$2"
+          }
+
+          NAME=$(read_field pyproject.toml name)
+          VERSION=$(read_field pyproject.toml version)
+          echo "name=$NAME"       >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # --- hard stop: never try to republish an existing version ----------
+          CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
+                   "https://pypi.org/pypi/${NAME}/${VERSION}/json" || echo "000")
+          if [ "$CODE" = "000" ]; then
+            echo "::error::Could not reach PyPI to check whether ${VERSION} exists; refusing to publish blindly."
+            exit 1
+          fi
+
+          PUBLISH=false
+          if [ "$CODE" = "200" ]; then
+            echo "::notice::${NAME} ${VERSION} is already on PyPI — nothing to do."
+          elif [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "::notice::Manual run: publishing ${VERSION}."
+            PUBLISH=true
+          else
+            # --- the trigger: did this push change the version? ---------------
+            PREV=""
+            if [ -n "${BEFORE:-}" ] \
+               && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
+               && git show "${BEFORE}:pyproject.toml" > /tmp/prev.toml 2>/dev/null; then
+              PREV=$(read_field /tmp/prev.toml version)
+            fi
+
+            if [ -z "$PREV" ]; then
+              echo "::notice::Could not read the previous version (new branch or force-push); not publishing automatically. Use the manual run if ${VERSION} should go out."
+            elif [ "$PREV" = "$VERSION" ]; then
+              echo "::notice::Version unchanged at ${VERSION} — skipping."
+            else
+              echo "::notice::Version changed ${PREV} -> ${VERSION}; publishing."
+              PUBLISH=true
+            fi
+          fi
+
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Build, test and publish
+    needs: decide
+    if: needs.decide.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/${{ needs.decide.outputs.name }}
+    permissions:
+      id-token: write   # mint the OIDC token for PyPI trusted publishing
+      contents: write   # push the version tag
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install system libraries
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zlib1g-dev libbz2-dev liblzma-dev libcurl4-openssl-dev
+
+      # An immutable release should not ship untested code, so the suite runs
+      # here rather than relying on the Tests workflow having passed.
+      - name: Run tests
+        run: |
+          uv sync --extra dev --locked
+          uv run pytest --tb=short
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Validate metadata
+        run: uvx twine check dist/*
+
+      # No `password:` — the action detects the OIDC token from the id-token
+      # permission above. It also attaches PEP 740 attestations, which record
+      # that these artifacts were built by this workflow from this commit.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Tag the release
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::notice::Tag ${TAG} already exists; leaving it alone."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
