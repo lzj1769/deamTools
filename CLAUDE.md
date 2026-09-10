@@ -37,6 +37,12 @@ uv run sphinx-build -b html docs docs/_build/html   # CI uses -W (warnings = err
 After editing dependencies in `pyproject.toml`, run `uv lock` and commit the
 updated `uv.lock`; CI syncs with `--locked` and fails if the two disagree.
 
+CI has two jobs. **Tests** runs pytest on 3.12 and 3.13; **Lint and type-check** runs
+`ruff check src/ tests/`, `black --check src/ tests/` and `mypy src/` on 3.12, each as a
+separate step with `if: '!cancelled()'` so one push reports every problem rather than one
+per round trip. All four are clean as of 2026-09-10 — keep them that way rather than
+letting a backlog build up again.
+
 Tests synthesize BAM/FASTA/BigWig fixtures with `pysam`/`pyBigWig` in tmp dirs (see helpers like `_make_read`/`_write_bam` in `tests/test_bam2bw.py`). They do **not** require `bwa`/`samtools` on PATH; `motifmatchpy` is a hard dependency and is exercised directly (`tests/test_matching.py` builds motifs in memory). The `index`/`align` commands need `bwa`+`samtools` at runtime; `match` needs the optional `pyjaspar` for JASPAR fetch.
 
 ## Architecture
