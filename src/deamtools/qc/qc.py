@@ -6,9 +6,16 @@ metrics most useful for judging a deaminase footprinting experiment:
 * **Read statistics** — totals plus the fraction of duplicate, properly-paired,
   secondary and supplementary reads.
 * **Editing statistics** — the genome-wide deamination rate (edits divided by
-  the number of editable C/G *opportunities* covered by passing reads) and the
-  distribution of edits per read. A high, accessibility-driven edit rate is the
-  primary signal that the deaminase treatment worked.
+  the number of editable C/G *opportunities* covered by passing fragments) and
+  the distribution of edits per fragment. A high, accessibility-driven edit rate
+  is the primary signal that the deaminase treatment worked.
+
+  Editing is counted **per fragment, not per record**: the two mates of a pair
+  are merged first (:func:`_fragment_bases`), so a reference position both mates
+  cover is one observation rather than two. Where the mates disagree — which at
+  an overlap means a sequencing error, since library prep turns a deaminated C
+  into a real T:A pair that both mates then carry — the higher base quality
+  wins. Single-end reads are fragments of one record, so nothing changes there.
 * **Trinucleotide context bias** — the edit fraction broken down by the
   trinucleotide centred on the edited cytosine. Edits are called
   strand-agnostically (matching :mod:`deamtools.preprocessing.bam2bw`): any
@@ -37,11 +44,11 @@ from __future__ import annotations
 
 import base64
 import csv
+import hashlib
 import io
 import json
 import logging
 import os
-import random
 from collections import defaultdict
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -56,9 +63,9 @@ from deamtools.utils import get_chrom_sizes_from_bam
 logger = logging.getLogger(__name__)
 
 # Histograms are stored as fixed-length arrays with a final overflow bin.
-_MAX_EDITS = 50  # edits-per-read histogram: bins 0.._MAX_EDITS (last = overflow)
+_MAX_EDITS = 100  # edits-per-fragment histogram: bins 0.._MAX_EDITS (last = overflow)
 _MAX_FRAGLEN = 1000  # fragment-length histogram: bins 0.._MAX_FRAGLEN (overflow)
-# Per-read edit-rate histogram: _RATE_BINS equal bins over [0, 1]. Real data piles
+# Per-fragment edit-rate histogram: _RATE_BINS bins over [0, 1]. Real data piles
 # up below 0.1, and the report plots this on a log-ish x axis, so 0.005-wide bins
 # are needed to resolve the peak -- 0.02 bins leave it about five bars wide.
 _RATE_BINS = 200
@@ -75,7 +82,11 @@ _BASE_IDX = {"A": 0, "C": 1, "G": 2, "T": 3}
 
 
 # Fixed so that subsampled QC runs are reproducible without another CLI flag.
-_SAMPLE_SEED = 20260910
+_SAMPLE_KEY = b"deamtools-qc-20260910"
+
+# Stand-in quality for a record with no QUAL string at all ("*"), which should
+# not be filtered out by --min_baseq; 255 is the SAM "unavailable" value.
+_NO_QUAL = 255
 
 
 def _revcomp(seq: str) -> str:
@@ -106,11 +117,16 @@ class _Stats:
         self.supplementary = 0
         self.proper_pair = 0
         self.passing = 0
+        # Fragments, not records: a mate pair is merged into one (see
+        # _accumulate_fragment), so these are the denominators for every
+        # editing metric below.
+        self.fragments = 0
+        self.fragments_from_pairs = 0
         self.total_opportunities = 0
         self.total_edits = 0
-        self.edits_per_read = np.zeros(_MAX_EDITS + 1, dtype=np.int64)
+        self.edits_per_fragment = np.zeros(_MAX_EDITS + 1, dtype=np.int64)
         self.fraglen = np.zeros(_MAX_FRAGLEN + 1, dtype=np.int64)
-        # Per-read edit rate (edited C/G over editable C/G): distribution + mean.
+        # Per-fragment edit rate (edited C/G over editable C/G): distribution.
         self.edit_rate_hist = np.zeros(_RATE_BINS, dtype=np.int64)
         self.edit_rate_sum = 0.0
         self.edit_rate_n = 0
@@ -129,9 +145,11 @@ class _Stats:
         self.supplementary += other.supplementary
         self.proper_pair += other.proper_pair
         self.passing += other.passing
+        self.fragments += other.fragments
+        self.fragments_from_pairs += other.fragments_from_pairs
         self.total_opportunities += other.total_opportunities
         self.total_edits += other.total_edits
-        self.edits_per_read += other.edits_per_read
+        self.edits_per_fragment += other.edits_per_fragment
         self.fraglen += other.fraglen
         self.edit_rate_hist += other.edit_rate_hist
         self.edit_rate_sum += other.edit_rate_sum
@@ -144,6 +162,146 @@ class _Stats:
             slot[1] += o
 
 
+def _keep_fragment(qname: str, fraction: float) -> bool:
+    """Keep this fragment when subsampling? Decided from the read name.
+
+    The decision has to be per *fragment*, not per record: drawing the two mates
+    independently would leave most surviving fragments with only one mate, which
+    would roughly halve every per-fragment edit count. Hashing the name gives
+    both mates the same answer without having to remember any decisions.
+
+    ``blake2b`` rather than the builtin ``hash()``, which is salted per process
+    and would make reruns disagree; the seed goes in as the key.
+    """
+    digest = hashlib.blake2b(qname.encode(), digest_size=8, key=_SAMPLE_KEY).digest()
+    return int.from_bytes(digest, "big") < fraction * (1 << 64)
+
+
+def _fragment_bases(
+    reads: tuple[pysam.AlignedSegment, ...],
+    min_baseq: int,
+) -> dict[int, str]:
+    """Merge the mates of one fragment into ``reference position -> called base``.
+
+    Where the mates overlap they are reporting the same duplex -- library prep
+    turns a deaminated C into a real T:A pair, so both mates carry the event --
+    so an overlapping position is *one* observation, not two. Counting it twice
+    is what per-record accumulation used to do. The higher base quality wins a
+    disagreement, which at an overlap is by definition a sequencing error in one
+    of the two mates.
+    """
+    best: dict[int, tuple[str, int]] = {}
+    for read in reads:
+        seq = read.query_sequence
+        if seq is None:
+            continue
+        quals = read.query_qualities
+        for qpos, rpos in read.get_aligned_pairs(matches_only=True):
+            qual = quals[qpos] if quals is not None else _NO_QUAL
+            if qual < min_baseq:
+                continue
+            previous = best.get(rpos)
+            if previous is None or qual > previous[1]:
+                best[rpos] = (seq[qpos], qual)
+    return {rpos: base for rpos, (base, _) in best.items()}
+
+
+def _accumulate_fragment(
+    stats: _Stats,
+    reads: tuple[pysam.AlignedSegment, ...],
+    ref_seq: str,
+    ref_len: int,
+    min_baseq: int,
+) -> None:
+    """Fold one fragment (one record, or a merged mate pair) into ``stats``."""
+    stats.fragments += 1
+    if len(reads) > 1:
+        stats.fragments_from_pairs += 1
+
+    bases = _fragment_bases(reads, min_baseq)
+
+    frag_edits = 0
+    frag_editable = 0  # distinct reference C/G covered (strand-agnostic)
+    frag_edited = 0  # of those, how many show C->T or G->A
+    for rpos, read_base in bases.items():
+        ref_base = ref_seq[rpos]
+
+        # Per-fragment edit rate: every reference C or G is an editable base;
+        # a C->T or G->A mismatch is an edit. Counted strand-agnostically and
+        # without the flank requirement used for context below.
+        if ref_base == "C":
+            frag_editable += 1
+            if read_base == "T":
+                frag_edited += 1
+        elif ref_base == "G":
+            frag_editable += 1
+            if read_base == "A":
+                frag_edited += 1
+
+        if rpos == 0 or rpos >= ref_len - 1:
+            continue  # need flanking bases for the trinucleotide context
+
+        # Strand-agnostic edit calling (matching bam2bw): a reference C may be
+        # edited C->T and a reference G may be edited G->A, regardless of read
+        # orientation. The G-centred context is reverse-complemented so both
+        # are reported as C->T.
+        if ref_base == "C":
+            ctx = ref_seq[rpos - 1 : rpos + 2]
+            is_edit = read_base == "T"
+        elif ref_base == "G":
+            ctx = _revcomp(ref_seq[rpos - 1 : rpos + 2])
+            is_edit = read_base == "A"
+        else:
+            continue
+
+        if "N" in ctx:
+            continue
+
+        stats.total_opportunities += 1
+        slot = stats.context[ctx]
+        slot[1] += 1
+        if is_edit:
+            stats.total_edits += 1
+            slot[0] += 1
+            frag_edits += 1
+
+            # Deaminase motif: accumulate the reference window around the edited
+            # base (centre excluded), unified to the C->T orientation by
+            # reverse-complementing G-centred windows.
+            half = _MOTIF_WINDOW // 2
+            lo = rpos - half
+            hi = lo + _MOTIF_WINDOW
+            if lo >= 0 and hi <= ref_len:
+                window = ref_seq[lo:hi]
+                if ref_base == "G":
+                    window = _revcomp(window)
+                for j, b in enumerate(window):
+                    if j == half:
+                        continue
+                    bi = _BASE_IDX.get(b)
+                    if bi is not None:
+                        stats.motif_pwm[j, bi] += 1
+                stats.motif_events += 1
+
+    stats.edits_per_fragment[min(frag_edits, _MAX_EDITS)] += 1
+
+    if frag_editable > 0:
+        rate = frag_edited / frag_editable
+        bin_idx = min(int(rate * _RATE_BINS), _RATE_BINS - 1)
+        stats.edit_rate_hist[bin_idx] += 1
+        stats.edit_rate_sum += rate
+        stats.edit_rate_n += 1
+
+
+def _mergeable(read: pysam.AlignedSegment) -> bool:
+    """Can this record's mate be paired with it inside this chromosome's pass?"""
+    return (
+        read.is_paired
+        and not read.mate_is_unmapped
+        and read.next_reference_id == read.reference_id
+    )
+
+
 def _process_chrom(
     bam_path: str,
     fasta_path: str,
@@ -154,14 +312,17 @@ def _process_chrom(
 ) -> _Stats:
     """Accumulate read, editing, context and fragment-length stats for one chrom.
 
-    When ``sample_fraction`` is below 1, each read is kept with that probability
-    and skipped before any analysis, which is where the cost is. The draw is
-    seeded from the chromosome name, so a rerun samples the same reads.
+    Editing is accumulated per **fragment**: mates are held until their partner
+    arrives and then merged, so a position both mates cover counts once. Records
+    whose mate never arrives -- unpaired, mate filtered out, mate on another
+    contig -- are folded in on their own at the end of the pass.
+
+    When ``sample_fraction`` is below 1, a fragment is kept with that
+    probability and skipped before any analysis, which is where the cost is.
+    The draw is seeded and keyed on the read name, so a rerun samples the same
+    fragments and both mates always share their fragment's fate.
     """
     stats = _Stats()
-    # A string seed is hashed deterministically by `random`, unlike the builtin
-    # hash(), which is salted per process and would break reproducibility.
-    rng = random.Random(f"{_SAMPLE_SEED}:{chrom}")
     subsampling = sample_fraction < 1.0
 
     with (
@@ -171,8 +332,12 @@ def _process_chrom(
         ref_seq = fasta.fetch(chrom).upper()
         ref_len = len(ref_seq)
 
+        # query_name -> the mate seen first, waiting for its partner.
+        pending: dict[str, pysam.AlignedSegment] = {}
+
         for read in bam.fetch(chrom):
-            if subsampling and rng.random() >= sample_fraction:
+            qname = read.query_name or ""
+            if subsampling and not _keep_fragment(qname, sample_fraction):
                 continue
             stats.total += 1
             if read.is_unmapped:
@@ -195,85 +360,19 @@ def _process_chrom(
                     flen = min(abs(read.template_length), _MAX_FRAGLEN)
                     stats.fraglen[flen] += 1
 
-            seq = read.query_sequence
-            if seq is None:
-                continue
-            quals = read.query_qualities
-
-            read_edits = 0
-            read_editable = 0  # reference C/G covered by this read (strand-agnostic)
-            read_edited = 0  # of those, how many show C->T or G->A
-            for qpos, rpos in read.get_aligned_pairs(matches_only=True):
-                if quals is not None and quals[qpos] < min_baseq:
+            if _mergeable(read):
+                mate = pending.pop(qname, None)
+                if mate is None:
+                    pending[qname] = read
                     continue
-                ref_base = ref_seq[rpos]
-                read_base = seq[qpos]
+                _accumulate_fragment(stats, (mate, read), ref_seq, ref_len, min_baseq)
+            else:
+                _accumulate_fragment(stats, (read,), ref_seq, ref_len, min_baseq)
 
-                # Per-read edit rate: every reference C or G is an editable base;
-                # a C->T or G->A mismatch is an edit. Counted strand-agnostically
-                # and without the flank requirement used for context below.
-                if ref_base == "C":
-                    read_editable += 1
-                    if read_base == "T":
-                        read_edited += 1
-                elif ref_base == "G":
-                    read_editable += 1
-                    if read_base == "A":
-                        read_edited += 1
-
-                if rpos == 0 or rpos >= ref_len - 1:
-                    continue  # need flanking bases for the trinucleotide context
-
-                # Strand-agnostic edit calling (matching bam2bw): a reference C
-                # may be edited C->T and a reference G may be edited G->A,
-                # regardless of read orientation. The G-centred context is
-                # reverse-complemented so both are reported as C->T.
-                if ref_base == "C":
-                    ctx = ref_seq[rpos - 1 : rpos + 2]
-                    is_edit = read_base == "T"
-                elif ref_base == "G":
-                    ctx = _revcomp(ref_seq[rpos - 1 : rpos + 2])
-                    is_edit = read_base == "A"
-                else:
-                    continue
-
-                if "N" in ctx:
-                    continue
-
-                stats.total_opportunities += 1
-                slot = stats.context[ctx]
-                slot[1] += 1
-                if is_edit:
-                    stats.total_edits += 1
-                    slot[0] += 1
-                    read_edits += 1
-
-                    # Deaminase motif: accumulate the reference window around the
-                    # edited base (centre excluded), unified to the C->T
-                    # orientation by reverse-complementing G-centred windows.
-                    half = _MOTIF_WINDOW // 2
-                    lo = rpos - half
-                    hi = lo + _MOTIF_WINDOW
-                    if lo >= 0 and hi <= ref_len:
-                        window = ref_seq[lo:hi]
-                        if ref_base == "G":
-                            window = _revcomp(window)
-                        for j, b in enumerate(window):
-                            if j == half:
-                                continue
-                            bi = _BASE_IDX.get(b)
-                            if bi is not None:
-                                stats.motif_pwm[j, bi] += 1
-                        stats.motif_events += 1
-
-            stats.edits_per_read[min(read_edits, _MAX_EDITS)] += 1
-
-            if read_editable > 0:
-                rate = read_edited / read_editable
-                bin_idx = min(int(rate * _RATE_BINS), _RATE_BINS - 1)
-                stats.edit_rate_hist[bin_idx] += 1
-                stats.edit_rate_sum += rate
-                stats.edit_rate_n += 1
+        # Mates whose partner never showed up: count them as one-record fragments
+        # rather than dropping them, so no passing read goes unaccounted for.
+        for orphan in pending.values():
+            _accumulate_fragment(stats, (orphan,), ref_seq, ref_len, min_baseq)
 
     return stats
 
@@ -458,11 +557,11 @@ def _build_metrics(
         if stats.total_opportunities
         else 0.0
     )
-    per_read = _histogram_summary(stats.edits_per_read)
+    per_fragment = _histogram_summary(stats.edits_per_fragment)
     fraglen = _histogram_summary(stats.fraglen)
 
-    # Per-read edit rate (edited C/G over editable C/G). Mean is exact; median is
-    # taken from the histogram bin centres.
+    # Per-fragment edit rate (edited C/G over editable C/G). Mean is exact;
+    # median is taken from the histogram bin centres.
     rate_mean = stats.edit_rate_sum / stats.edit_rate_n if stats.edit_rate_n else 0.0
     if stats.edit_rate_n:
         cum = np.cumsum(stats.edit_rate_hist)
@@ -495,17 +594,22 @@ def _build_metrics(
                 stats.proper_pair / stats.passing if stats.passing else 0.0
             ),
         },
+        "fragments": {
+            "total": stats.fragments,
+            "from_mate_pairs": stats.fragments_from_pairs,
+            "from_single_records": stats.fragments - stats.fragments_from_pairs,
+        },
         "editing": {
             "total_opportunities": stats.total_opportunities,
             "total_edits": stats.total_edits,
             "global_edit_rate": edit_rate,
-            "mean_edits_per_read": per_read["mean"],
-            "median_edits_per_read": per_read["median"],
+            "mean_edits_per_fragment": per_fragment["mean"],
+            "median_edits_per_fragment": per_fragment["median"],
         },
-        "edit_rate_per_read": {
+        "edit_rate_per_fragment": {
             # Not called `n_reads`: that is the --n_reads subsample size, which
             # is a plain uniform draw with no condition on the read at all.
-            "n_reads_with_editable_bases": stats.edit_rate_n,
+            "n_fragments_with_editable_bases": stats.edit_rate_n,
             "mean": rate_mean,
             "median": rate_median,
             "histogram": [int(c) for c in stats.edit_rate_hist],
@@ -563,14 +667,14 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
     axes[0].set_ylabel("edit fraction")
     axes[0].set_title("Trinucleotide context bias")
 
-    # Panel 2: edits per read (raw count).
-    hist = stats.edits_per_read
+    # Panel 2: edits per fragment (raw count).
+    hist = stats.edits_per_fragment
     axes[1].bar(np.arange(len(hist)), hist, color="#2c7fb8")
-    axes[1].set_xlabel("edits per read")
+    axes[1].set_xlabel("edits per fragment")
     axes[1].set_ylabel("reads")
-    axes[1].set_title("Edits per read")
+    axes[1].set_title("Edits per fragment")
 
-    # Panel 3: per-read edit rate (edited C/G over editable C/G). Most reads sit
+    # Panel 3: per-fragment edit rate (edited C/G over editable C/G). Most sit
     # below 0.1, so the x axis is symlog: log above 0.01, linear below it so that
     # the (populated) zero-rate bin is still representable. `stairs` is used
     # instead of `bar` because a bar's width is in data units and would be
@@ -583,10 +687,10 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
     axes[2].set_xticks([0, 0.01, 0.1, 1])
     axes[2].xaxis.set_major_formatter(ScalarFormatter())
     axes[2].xaxis.set_minor_locator(NullLocator())
-    axes[2].set_xlabel("edit rate per read")
+    axes[2].set_xlabel("edit rate per fragment")
     axes[2].set_ylabel("reads")
     axes[2].set_title(
-        f"Per-read edit rate (mean {metrics['edit_rate_per_read']['mean']:.3f})"
+        f"Per-fragment edit rate (mean {metrics['edit_rate_per_fragment']['mean']:.3f})"
     )
 
     # Panel 4: fragment length.
@@ -734,11 +838,24 @@ _METRIC_DOCS: dict[str, dict[str, str]] = {
             "insert-size or mapping problems."
         ),
     },
+    "fragments": {
+        "total": (
+            "Fragments the editing metrics were computed over. Every metric "
+            "below is per fragment, not per read: a mate pair is merged first, "
+            "so a reference position both mates cover counts once."
+        ),
+        "from_mate_pairs": "Fragments built by merging two mates.",
+        "from_single_records": (
+            "Fragments that were a single record &mdash; unpaired reads, and "
+            "reads whose mate was unmapped, filtered out, or on another contig."
+        ),
+    },
     "editing": {
         "total_opportunities": (
-            "Editable reference positions covered by passing reads: any "
+            "Editable reference positions covered by passing fragments: any "
             "reference C or G (counted regardless of read orientation), with "
-            "both flanking bases present and base quality &ge; min_baseq."
+            "both flanking bases present and base quality &ge; min_baseq. A "
+            "position covered by both mates counts once."
         ),
         "total_edits": (
             "Opportunities showing a deamination event &mdash; a C&rarr;T "
@@ -750,26 +867,27 @@ _METRIC_DOCS: dict[str, dict[str, str]] = {
             "signal-quality number. A successful deaminase treatment pushes this "
             "well above the sequencing-error background."
         ),
-        "mean_edits_per_read": (
-            "Average number of edits per read. Deaminase reads carry many edits, "
-            "unlike the two Tn5 cut sites of a standard ATAC read."
+        "mean_edits_per_fragment": (
+            "Average number of edits per fragment. Deaminase fragments carry "
+            "many edits, unlike the two Tn5 cut sites of a standard ATAC read."
         ),
-        "median_edits_per_read": "Median number of edits per read.",
+        "median_edits_per_fragment": "Median number of edits per fragment.",
     },
-    "edit_rate_per_read": {
-        "n_reads_with_editable_bases": (
-            "Reads covering at least one reference C or G, which is what a "
-            "per-read edit rate needs a denominator for. Note this counts "
-            "editable bases, not editing events: a read with no edit at all "
+    "edit_rate_per_fragment": {
+        "n_fragments_with_editable_bases": (
+            "Fragments covering at least one reference C or G, which is what a "
+            "per-fragment edit rate needs a denominator for. Note this counts "
+            "editable bases, not editing events: a fragment with no edit at all "
             "still contributes, at rate 0. Unrelated to <code>--n_reads</code>."
         ),
         "mean": (
-            "Mean of the per-read edit rate, where a read's rate = (edited C/G) "
-            "/ (editable C/G), counted strand-agnostically over every reference "
-            "C and G the read covers. Normalising by the number of editable "
-            "bases makes reads comparable regardless of length or composition."
+            "Mean of the per-fragment edit rate, where a fragment's rate = "
+            "(edited C/G) / (editable C/G), counted strand-agnostically over "
+            "every distinct reference C and G the fragment covers. Normalising "
+            "by the number of editable bases makes fragments comparable "
+            "regardless of length or composition."
         ),
-        "median": "Median of the per-read edit-rate distribution.",
+        "median": "Median of the per-fragment edit-rate distribution.",
     },
     "fragment_length": {
         "mean": (
@@ -851,8 +969,8 @@ def _render_html(
     cards = [
         ("Passing reads", _fmt(metrics["reads"]["passing"])),
         ("Global edit rate", _fmt(metrics["editing"]["global_edit_rate"])),
-        ("Mean edits/read", _fmt(metrics["editing"]["mean_edits_per_read"])),
-        ("Mean edit rate/read", _fmt(metrics["edit_rate_per_read"]["mean"])),
+        ("Mean edits/fragment", _fmt(metrics["editing"]["mean_edits_per_fragment"])),
+        ("Mean edit rate/fragment", _fmt(metrics["edit_rate_per_fragment"]["mean"])),
         ("Duplicate rate", _fmt(metrics["reads"]["duplicate_rate"])),
     ]
     if "tss_enrichment" in metrics:
@@ -915,6 +1033,15 @@ def _render_html(
             metrics["reads"],
         ),
         _html_section(
+            "Fragments",
+            "Editing is measured per fragment, not per read: a mate pair is "
+            "merged before counting, so a reference position both mates cover "
+            "is one observation rather than two. Where the mates disagree, the "
+            "higher base quality wins.",
+            "fragments",
+            metrics["fragments"],
+        ),
+        _html_section(
             "Editing statistics",
             "Strand-agnostic deamination signal: how many editable C/G "
             "positions were seen and how many were edited (C&rarr;T or "
@@ -923,13 +1050,13 @@ def _render_html(
             metrics["editing"],
         ),
         _html_section(
-            "Per-read edit rate",
-            "Distribution of each read's edited-fraction of its editable C/G "
-            "bases. Plotted as its own panel in the summary figure above.",
-            "edit_rate_per_read",
+            "Per-fragment edit rate",
+            "Distribution of each fragment's edited-fraction of its editable "
+            "C/G bases. Plotted as its own panel in the summary figure above.",
+            "edit_rate_per_fragment",
             {
                 k: v
-                for k, v in metrics["edit_rate_per_read"].items()
+                for k, v in metrics["edit_rate_per_fragment"].items()
                 if k not in ("histogram", "bin_edges")
             },
         ),
@@ -1074,16 +1201,22 @@ def run_qc(
         Whether to render and embed the summary figure in the HTML report.
     n_reads : int, optional
         Subsample to approximately this many reads instead of using all of
-        them, for a faster pass over a large BAM. Reads are drawn uniformly
+        them, for a faster pass over a large BAM. Fragments are drawn uniformly
         across the genome (each kept with probability ``n_reads / total``,
         which is read from the BAM index, so nothing is scanned twice), and
-        the draw is seeded, so a rerun samples the same reads. Ignored when
+        the draw is seeded, so a rerun samples the same fragments. Ignored when
         the BAM already holds fewer reads than this.
+
+        The unit of the draw is the **fragment**, keyed on the read name, so
+        both mates always share their fragment's fate. Drawing the two mates
+        independently would leave most surviving fragments with only one mate
+        and roughly halve every per-fragment edit count; keying on the name
+        costs one hash per record and avoids that entirely.
 
         The draw is blind to what a read contains: the coin is flipped before
         the read is looked at, so reads carrying no editing event are kept at
         exactly the same rate as reads full of them. (Do not confuse this with
-        ``edit_rate_per_read.n_reads_with_editable_bases``, which *is*
+        ``edit_rate_per_fragment.n_fragments_with_editable_bases``, which *is*
         conditional -- on covering a reference C or G, not on being edited.)
 
         Rates and distributions -- editing rate, duplicate rate, context bias,
@@ -1146,7 +1279,8 @@ def run_qc(
             merged.update(future.result())
 
     logger.info(
-        f"  {merged.passing} passing read(s); "
+        f"  {merged.passing} passing read(s) in {merged.fragments} fragment(s) "
+        f"({merged.fragments_from_pairs} from merged mate pairs); "
         f"{merged.total_edits}/{merged.total_opportunities} edits/opportunities"
     )
 

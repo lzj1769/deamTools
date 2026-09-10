@@ -136,7 +136,7 @@ class TestQC:
         assert "TCG" in m["context"]
         assert m["context"]["TCG"]["edits"] == 2
 
-    def test_edit_rate_per_read(self, tmp_path, fasta_file):
+    def test_edit_rate_per_fragment(self, tmp_path, fasta_file):
         # Forward read over the whole reference ACGTCGATCG.
         # Editable bases (C or G), strand-agnostic: C@1, G@2, C@4, G@5, C@8, G@9
         #   -> 6 editable bases.
@@ -147,8 +147,8 @@ class TestQC:
         out_dir = str(tmp_path)
         m = run_qc(bam, fasta_file, out_dir, "qc", min_mapq=0, min_baseq=0, plot=False)
 
-        erpr = m["edit_rate_per_read"]
-        assert erpr["n_reads_with_editable_bases"] == 1
+        erpr = m["edit_rate_per_fragment"]
+        assert erpr["n_fragments_with_editable_bases"] == 1
         assert erpr["mean"] == pytest.approx(1 / 6, abs=1e-6)
         assert sum(erpr["histogram"]) == 1
         assert len(erpr["histogram"]) == len(erpr["bin_edges"]) - 1
@@ -163,7 +163,7 @@ class TestQC:
         bam = _write_bam(str(tmp_path / "x.bam"), [rev])
         out_dir = str(tmp_path)
         m = run_qc(bam, fasta_file, out_dir, "qc", min_mapq=0, min_baseq=0, plot=False)
-        assert m["edit_rate_per_read"]["mean"] == pytest.approx(1 / 6, abs=1e-6)
+        assert m["edit_rate_per_fragment"]["mean"] == pytest.approx(1 / 6, abs=1e-6)
 
     def test_min_baseq_excludes_opportunity(self, tmp_path, fasta_file):
         # Low base quality everywhere -> no opportunities counted at all.
@@ -281,6 +281,164 @@ class TestQC:
         assert "data:image/png;base64," not in html
         # Tables and descriptions are still present without the figure.
         assert "Trinucleotide context bias" in html
+
+
+class TestFragmentMerging:
+    """Editing is counted per fragment: overlapping mates are one observation.
+
+    REF_SEQ is ACGTCGATCG. Editable C/G sit at 1, 2, 4, 5, 8, 9; the five with
+    both flanking bases present (1, 2, 4, 5, 8) are context opportunities.
+    """
+
+    # Both mates of a real pair carry the same edits: library prep turns the
+    # deaminated C into a T:A pair that both strands then report.
+    EDITED = "ATGTCAATCG"  # C->T at pos 1, G->A at pos 5
+
+    def _pair(self, seq1, seq2, **kw):
+        return [
+            _make_read(
+                "frag", seq1, 0, is_read1=True, mate_pos=0, mate_reverse=True, **kw
+            ),
+            _make_read(
+                "frag", seq2, 0, is_read1=False, is_reverse=True, mate_pos=0, **kw
+            ),
+        ]
+
+    def _run(self, tmp_path, fasta_file, reads, name="f", **kw):
+        bam = _write_bam(str(tmp_path / f"{name}.bam"), reads)
+        return run_qc(
+            bam,
+            fasta_file,
+            str(tmp_path / f"o_{name}"),
+            name,
+            min_baseq=0,
+            plot=False,
+            **kw,
+        )
+
+    def test_overlapping_mates_count_a_position_once(self, tmp_path, fasta_file):
+        m = self._run(
+            tmp_path, fasta_file, self._pair(self.EDITED, self.EDITED), min_mapq=0
+        )
+        assert m["reads"]["total"] == 2
+        assert m["fragments"]["total"] == 1
+        assert m["fragments"]["from_mate_pairs"] == 1
+
+        # Per record this was 10 opportunities and 4 edits; the mates cover the
+        # same 0-9, so the fragment sees each position exactly once.
+        assert m["editing"]["total_opportunities"] == 5
+        assert m["editing"]["total_edits"] == 2
+        assert m["editing"]["mean_edits_per_fragment"] == pytest.approx(2.0)
+        # 2 edited of 6 editable C/G, not 4 of 12.
+        assert m["edit_rate_per_fragment"]["mean"] == pytest.approx(2 / 6, abs=1e-6)
+        assert m["edit_rate_per_fragment"]["n_fragments_with_editable_bases"] == 1
+
+    def test_non_overlapping_mates_still_add_up(self, tmp_path, fasta_file):
+        # R1 covers 0-4, R2 covers 5-9: disjoint, so nothing is deduplicated and
+        # the fragment sees the union.
+        reads = [
+            _make_read(
+                "frag", "ATGTC", 0, is_read1=True, mate_pos=5, mate_reverse=True
+            ),  # ref[0:5] ACGTC, C->T at 1
+            _make_read(
+                "frag", "AATCG", 5, is_read1=False, is_reverse=True, mate_pos=0
+            ),  # ref[5:10] GATCG, G->A at 5
+        ]
+        m = self._run(tmp_path, fasta_file, reads, min_mapq=0)
+        assert m["fragments"]["total"] == 1
+        assert m["editing"]["total_opportunities"] == 5  # 1,2,4 from R1; 5,8 from R2
+        assert m["editing"]["total_edits"] == 2
+        assert m["edit_rate_per_fragment"]["mean"] == pytest.approx(2 / 6, abs=1e-6)
+
+    def test_higher_base_quality_wins_a_disagreement(self, tmp_path, fasta_file):
+        """At an overlap the mates disagreeing means one of them misread."""
+
+        def with_qual_at(read, pos, qual):
+            quals = list(read.query_qualities)
+            quals[pos] = qual
+            read.query_qualities = pysam.qualitystring_to_array(
+                "".join(chr(q + 33) for q in quals)
+            )
+            return read
+
+        # R1 calls T at pos 1 (an edit), R2 calls the reference C there.
+        edited, plain = "ATGTCGATCG", REF_SEQ
+
+        confident_edit = self._pair(edited, plain)
+        with_qual_at(confident_edit[0], 1, 40)
+        with_qual_at(confident_edit[1], 1, 2)
+        assert (
+            self._run(tmp_path, fasta_file, confident_edit, min_mapq=0)["editing"][
+                "total_edits"
+            ]
+            == 1
+        )
+
+        confident_ref = self._pair(edited, plain)
+        with_qual_at(confident_ref[0], 1, 2)
+        with_qual_at(confident_ref[1], 1, 40)
+        assert (
+            self._run(tmp_path, fasta_file, confident_ref, name="b", min_mapq=0)[
+                "editing"
+            ]["total_edits"]
+            == 0
+        )
+
+    def test_orphaned_mate_is_still_counted(self, tmp_path, fasta_file):
+        # R2 fails --min_mapq, so R1's partner never arrives. It must still be
+        # folded in rather than sitting in the buffer and being dropped.
+        reads = self._pair(self.EDITED, self.EDITED)
+        reads[1].mapping_quality = 0
+        m = self._run(tmp_path, fasta_file, reads, min_mapq=20)
+        assert m["reads"]["passing"] == 1
+        assert m["fragments"]["total"] == 1
+        assert m["fragments"]["from_mate_pairs"] == 0
+        assert m["fragments"]["from_single_records"] == 1
+        assert m["editing"]["total_edits"] == 2
+
+    def test_single_end_reads_are_one_fragment_each(self, tmp_path, fasta_file):
+        reads = [_make_read(f"r{i}", self.EDITED, 0, is_paired=False) for i in range(3)]
+        m = self._run(tmp_path, fasta_file, reads, min_mapq=0)
+        assert m["reads"]["total"] == 3
+        assert m["fragments"]["total"] == 3
+        assert m["fragments"]["from_mate_pairs"] == 0
+        assert m["editing"]["total_opportunities"] == 15  # 5 per fragment
+
+    def test_subsampling_keeps_both_mates_or_neither(self, tmp_path, fasta_file):
+        """Sampling is keyed on the read name, so a fragment survives whole.
+
+        Drawing records independently would leave most kept fragments with one
+        mate and halve every per-fragment edit count.
+        """
+        reads = []
+        for i in range(500):
+            reads += [
+                _make_read(
+                    f"frag{i}",
+                    self.EDITED,
+                    0,
+                    is_read1=True,
+                    mate_pos=0,
+                    mate_reverse=True,
+                ),
+                _make_read(
+                    f"frag{i}",
+                    self.EDITED,
+                    0,
+                    is_read1=False,
+                    is_reverse=True,
+                    mate_pos=0,
+                ),
+            ]
+        m = self._run(tmp_path, fasta_file, reads, min_mapq=0, n_reads=500)
+
+        assert m["sampling"]["subsampled"] is True
+        assert 0 < m["fragments"]["total"] < 500
+        assert m["fragments"]["from_single_records"] == 0
+        assert m["fragments"]["from_mate_pairs"] == m["fragments"]["total"]
+        assert m["reads"]["total"] == 2 * m["fragments"]["total"]
+        # And the merged rate is the same as in a full run, not half of it.
+        assert m["edit_rate_per_fragment"]["mean"] == pytest.approx(2 / 6, abs=1e-6)
 
 
 class TestTssEnrichment:
@@ -538,9 +696,9 @@ class TestSubsampling:
         full = run_qc(bam, fasta_file, str(tmp_path / "f"), "f", plot=False)
         sub = run_qc(bam, fasta_file, str(tmp_path / "s"), "s", plot=False, n_reads=500)
 
-        assert full["editing"]["mean_edits_per_read"] == pytest.approx(0.5)
+        assert full["editing"]["mean_edits_per_fragment"] == pytest.approx(0.5)
         # Binomial(~500, 0.5) on the sample: sd ~= 0.022, so this band is ~5 sd.
-        assert sub["editing"]["mean_edits_per_read"] == pytest.approx(0.5, abs=0.11)
+        assert sub["editing"]["mean_edits_per_fragment"] == pytest.approx(0.5, abs=0.11)
         assert 0 < sub["reads"]["total"] < 1000
 
     def test_editing_rate_is_unbiased_by_sampling(self, tmp_path, fasta_file):

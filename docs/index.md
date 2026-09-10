@@ -53,7 +53,7 @@ tracks, per-fragment tables, or QC metrics — at single-base resolution.
   signal extension and region restriction.
 - **Per-fragment tables** capturing single-molecule edit patterns, with cell-barcode
   support for single-cell data.
-- **Quality control** in a self-contained HTML report: editing rate, per-read edit-rate
+- **Quality control** in a self-contained HTML report: editing rate, per-fragment edit-rate
   distribution, enzyme context bias, fragment sizes, and ENCODE-style TSS enrichment.
 - **Enzyme-bias diagnostics**, including a deaminase sequence-preference logo built
   directly from the BAM and embedded in the QC report.

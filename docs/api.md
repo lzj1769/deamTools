@@ -114,7 +114,9 @@ run_qc(
 
 Compute QC metrics and write `<out_dir>/<out_name>.json` plus a self-contained HTML report. The report includes the **deaminase sequence-motif logo**, built directly from the editing events in the BAM. Returns the metrics dictionary.
 
-`n_reads` subsamples the BAM to roughly that many reads (drawn uniformly across the genome from a fixed seed) instead of reading all of them; rates stay unbiased, but the reported counts are counts of the sample.
+Editing is counted **per fragment**: for paired-end data the mates are merged first, so a reference position both mates cover is one observation rather than two, and the higher base quality decides a disagreement. The `reads` block still counts records; `fragments` reports how many fragments the editing metrics ran over and how many came from merged pairs.
+
+`n_reads` subsamples the BAM to roughly that many reads (drawn uniformly across the genome from a fixed seed) instead of reading all of them; rates stay unbiased, but the reported counts are counts of the sample. The draw is keyed on the read name, so both mates of a fragment always share its fate.
 
 Supplying `tss_path` adds TSS enrichment, computed the way the [ENCODE ATAC-seq pipeline](https://github.com/ENCODE-DCC/atac-seq-pipeline) defines it: insertion 5' ends binned at 10 bp over a ±`tss_flank` window, minus-strand TSS flipped, normalised to the outermost 100 bp on each side, and scored as the peak of that profile. The report gains a TSS plot with the score marked on it, and the per-bin numbers behind it are written to `<out_dir>/<out_name>.tss_enrichment.csv`.
 

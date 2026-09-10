@@ -151,27 +151,51 @@ deamtools qc \
 
 Counts of `total`, `passing`, `unmapped`, `duplicate`, `secondary`, `supplementary`, and `proper_pair` reads, plus `duplicate_rate` (over total reads) and `proper_pair_rate` (over passing reads). A low passing fraction or a high duplicate rate points to library-complexity problems.
 
+### Fragments (`fragments`)
+
+**Editing is counted per fragment, not per read.** For paired-end data the two mates
+are merged before anything is counted, so a reference position that both mates
+cover is one observation instead of two. Where the mates disagree at an overlap,
+the higher base quality wins — library prep turns a deaminated C into a real T:A
+pair that *both* mates then report, so a disagreement there means one of them
+misread. Single-end reads are fragments of one record, so nothing changes for them.
+
+| Field | Description |
+|---|---|
+| `total` | Fragments the editing metrics were computed over. |
+| `from_mate_pairs` | Fragments built by merging two mates. |
+| `from_single_records` | Fragments that were a single record — unpaired reads, and reads whose mate was unmapped, filtered out, or on another contig. |
+
+The `reads` block above still counts *records*, so for a paired library
+`reads.passing` is roughly twice `fragments.total`.
+
+This matters more than it sounds. On `data/ACCESS-ATAC/chr10.bam`, **24.5%** of
+`total_opportunities` were mate overlap being counted twice (62.8 M → 47.4 M), and
+removing it moved `global_edit_rate` from 0.0824 to 0.0856 — the overlap is not a
+random subset, so double-weighting it biased the rate, it did not merely inflate
+the counts.
+
 ### Editing statistics (`editing`)
 
 The core signal-quality metrics:
 
-- **`total_opportunities`** — the number of editable reference C/G positions (covered by passing reads, with both flanking bases present, passing `--min_baseq`). Counted strand-agnostically (matching `bam2bw`): every reference **C** *and* every reference **G** the read covers is an opportunity, regardless of read orientation.
+- **`total_opportunities`** — the number of editable reference C/G positions (covered by passing fragments, with both flanking bases present, passing `--min_baseq`). Counted strand-agnostically (matching `bam2bw`): every reference **C** *and* every reference **G** the fragment covers is an opportunity, regardless of read orientation. A position covered by both mates counts once.
 - **`total_edits`** — the number of those positions showing a deamination event: a `C→T` mismatch at a reference C or a `G→A` mismatch at a reference G, regardless of read orientation.
 - **`global_edit_rate`** — `total_edits / total_opportunities`. The single most important number: a successful deaminase treatment drives this well above the background sequencing-error rate.
-- **`mean_edits_per_read`**, **`median_edits_per_read`** — the per-read editing distribution. Deaminase reads typically carry many edits, in contrast to the two Tn5 insertions of a standard ATAC read.
+- **`mean_edits_per_fragment`**, **`median_edits_per_fragment`** — the per-fragment editing distribution. Deaminase fragments typically carry many edits, in contrast to the two Tn5 insertions of a standard ATAC read.
 
-### Per-read edit rate (`edit_rate_per_read`)
+### Per-fragment edit rate (`edit_rate_per_fragment`)
 
-The fraction of editable bases that were actually edited, computed **per read**. For each read, the *editable* bases are the reference cytosines and guanines it covers (counted strand-agnostically, gated by `--min_baseq`); the *edited* bases are those showing a `C→T` or `G→A` deamination event. The per-read rate is `edited / editable`.
+The fraction of editable bases that were actually edited, computed **per fragment**. For each fragment, the *editable* bases are the distinct reference cytosines and guanines it covers (counted strand-agnostically, gated by `--min_baseq`); the *edited* bases are those showing a `C→T` or `G→A` deamination event. The rate is `edited / editable`.
 
 | Field | Description |
 |---|---|
-| `n_reads_with_editable_bases` | Reads covering at least one reference C or G — the rest have no denominator and so no rate. This counts editable *bases*, not editing *events*: a read with no edit at all still contributes, at rate 0. Unrelated to the `--n_reads` subsampling flag. |
-| `mean`, `median` | Centre of the per-read edit-rate distribution. `mean` is exact; `median` is taken from the histogram bin centres. |
+| `n_fragments_with_editable_bases` | Fragments covering at least one reference C or G — the rest have no denominator and so no rate. This counts editable *bases*, not editing *events*: a fragment with no edit at all still contributes, at rate 0. Unrelated to the `--n_reads` subsampling flag. |
+| `mean`, `median` | Centre of the per-fragment edit-rate distribution. `mean` is exact; `median` is taken from the histogram bin centres. |
 | `histogram` | Counts across 200 equal-width bins spanning the `[0, 1]` rate range. |
 | `bin_edges` | The 201 bin boundaries, so `histogram[i]` covers `[bin_edges[i], bin_edges[i+1])`. |
 
-This complements `mean_edits_per_read`: the raw count scales with read length and coverage of editable bases, whereas the rate normalises by how many editable bases each read actually had, making it directly comparable across reads and libraries. A higher, well-separated distribution indicates stronger, more uniform deaminase activity. The distribution is drawn as its own panel in the PNG summary, on a log-like x axis (linear below 0.01) because real rates pile up well below 0.1.
+This complements `mean_edits_per_fragment`: the raw count scales with fragment length and coverage of editable bases, whereas the rate normalises by how many editable bases each fragment actually had, making it directly comparable across fragments and libraries. A higher, well-separated distribution indicates stronger, more uniform deaminase activity. The distribution is drawn as its own panel in the PNG summary, on a log-like x axis (linear below 0.01) because real rates pile up well below 0.1.
 
 ### Trinucleotide context bias (`context`)
 
@@ -210,8 +234,8 @@ One deviation from ENCODE is deliberate. ENCODE reaches the insertion site indir
 **`<out_name>.html`** — a self-contained, MultiQC-style report (no external files or network needed). It opens with headline summary cards, embeds the plots, and presents every metric in a table alongside a plain-language description of its meaning. The embedded figures (omitted with `--no_plot`) are the four-panel summary figure:
 
 1. Trinucleotide context edit fraction (enzyme fingerprint)
-2. Edits-per-read histogram (raw count)
-3. Per-read edit-rate distribution (edited / editable)
+2. Edits-per-fragment histogram (raw count)
+3. Per-fragment edit-rate distribution (edited / editable)
 4. Fragment-length distribution
 
 plus the deaminase sequence-motif logo, and — when `--tss` is supplied — the TSS enrichment profile, with the score marked on the curve.
