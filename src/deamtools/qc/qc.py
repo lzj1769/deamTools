@@ -54,7 +54,10 @@ logger = logging.getLogger(__name__)
 # Histograms are stored as fixed-length arrays with a final overflow bin.
 _MAX_EDITS = 50  # edits-per-read histogram: bins 0.._MAX_EDITS (last = overflow)
 _MAX_FRAGLEN = 1000  # fragment-length histogram: bins 0.._MAX_FRAGLEN (overflow)
-_RATE_BINS = 50  # per-read edit-rate histogram: _RATE_BINS equal bins over [0, 1]
+# Per-read edit-rate histogram: _RATE_BINS equal bins over [0, 1]. Real data piles
+# up below 0.1, and the report plots this on a log-ish x axis, so 0.005-wide bins
+# are needed to resolve the peak -- 0.02 bins leave it about five bars wide.
+_RATE_BINS = 200
 _MOTIF_WINDOW = 11  # bp window for the deaminase motif logo (odd; centre +/- 5)
 
 _COMPLEMENT = str.maketrans("ACGT", "TGCA")
@@ -433,6 +436,7 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.ticker import NullLocator, ScalarFormatter
 
     has_tss = "tss_enrichment" in metrics
     n_panels = 5 if has_tss else 4
@@ -460,12 +464,19 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
     axes[1].set_ylabel("reads")
     axes[1].set_title("Edits per read")
 
-    # Panel 3: per-read edit rate (edited C/G over editable C/G).
+    # Panel 3: per-read edit rate (edited C/G over editable C/G). Most reads sit
+    # below 0.1, so the x axis is symlog: log above 0.01, linear below it so that
+    # the (populated) zero-rate bin is still representable. `stairs` is used
+    # instead of `bar` because a bar's width is in data units and would be
+    # distorted by the non-linear scale.
     rate_hist = stats.edit_rate_hist
-    n_bins = len(rate_hist)
-    centers = (np.arange(n_bins) + 0.5) / n_bins
-    axes[2].bar(centers, rate_hist, width=1.0 / n_bins, color="#e6550d")
+    edges = np.arange(len(rate_hist) + 1) / len(rate_hist)
+    axes[2].stairs(rate_hist, edges, fill=True, color="#e6550d")
+    axes[2].set_xscale("symlog", linthresh=0.01, linscale=0.5)
     axes[2].set_xlim(0, 1)
+    axes[2].set_xticks([0, 0.01, 0.1, 1])
+    axes[2].xaxis.set_major_formatter(ScalarFormatter())
+    axes[2].xaxis.set_minor_locator(NullLocator())
     axes[2].set_xlabel("edit rate per read")
     axes[2].set_ylabel("reads")
     axes[2].set_title(
