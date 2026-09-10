@@ -85,14 +85,28 @@ def _pair(name, r1_pos, r1_seq, r2_pos, r2_seq, **kw):
     """Build a properly-paired R1 (forward) + R2 (reverse) pair."""
     tags = kw.pop("tags", None)
     r1 = _make_read(
-        name, r1_seq, r1_pos, is_paired=True, is_read1=True,
-        is_reverse=False, mate_pos=r2_pos, mate_reverse=True,
-        tags=tags, **kw,
+        name,
+        r1_seq,
+        r1_pos,
+        is_paired=True,
+        is_read1=True,
+        is_reverse=False,
+        mate_pos=r2_pos,
+        mate_reverse=True,
+        tags=tags,
+        **kw,
     )
     r2 = _make_read(
-        name, r2_seq, r2_pos, is_paired=True, is_read1=False,
-        is_reverse=True, mate_pos=r1_pos, mate_reverse=False,
-        tags=tags, **kw,
+        name,
+        r2_seq,
+        r2_pos,
+        is_paired=True,
+        is_read1=False,
+        is_reverse=True,
+        mate_pos=r1_pos,
+        mate_reverse=False,
+        tags=tags,
+        **kw,
     )
     return [r1, r2]
 
@@ -127,34 +141,50 @@ class TestBam2Fragment:
         # Pair: R1 covers pos 0-5 with C->T at pos 1; R2 covers pos 4-10 (no edits).
         reads = _pair(
             "pair1",
-            r1_pos=0, r1_seq="ATGTCG",         # C->T at pos 1
-            r2_pos=4, r2_seq=REF_SEQ[4:10],    # CGATCG, identical to ref
+            r1_pos=0,
+            r1_seq="ATGTCG",  # C->T at pos 1
+            r2_pos=4,
+            r2_seq=REF_SEQ[4:10],  # CGATCG, identical to ref
         )
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
 
         lines = _read_lines(out)
         assert len(lines) == 1
         cols = lines[0].split("\t")
         # chrom, start, end, count, edits
         assert cols[0] == "chr1"
-        assert cols[1] == "0"   # min(R1 start=0, R2 start=4)
+        assert cols[1] == "0"  # min(R1 start=0, R2 start=4)
         assert cols[2] == "10"  # max(R1 end=6, R2 end=10)
         assert cols[3] == "1"
-        assert cols[4] == "1"   # only edit pos
+        assert cols[4] == "1"  # only edit pos
 
     def test_no_edits_emits_dot(self, tmp_path, fasta_file):
         reads = _pair(
             "pair1",
-            r1_pos=0, r1_seq=REF_SEQ[0:6],
-            r2_pos=4, r2_seq=REF_SEQ[4:10],
+            r1_pos=0,
+            r1_seq=REF_SEQ[0:6],
+            r2_pos=4,
+            r2_seq=REF_SEQ[4:10],
         )
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
         cols = _read_lines(out)[0].split("\t")
         assert cols[4] == "."
 
@@ -165,8 +195,14 @@ class TestBam2Fragment:
             reads += _pair(n, 0, "ATGTCG", 4, REF_SEQ[4:10])  # both have C->T at pos 1
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
         lines = _read_lines(out)
         assert len(lines) == 1
         cols = lines[0].split("\t")
@@ -182,8 +218,14 @@ class TestBam2Fragment:
         reads += _pair("pB", 0, "ACGTTG", 4, REF_SEQ[4:10])
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
         lines = _read_lines(out)
         assert len(lines) == 2
         edit_cols = sorted(line.split("\t")[4] for line in lines)
@@ -196,13 +238,21 @@ class TestBam2Fragment:
         # ref pos 2..7 = GTCGAT; an A at pos 2 -> ATCGAT.
         reads = _pair(
             "pair1",
-            r1_pos=0, r1_seq=REF_SEQ[0:6],  # no edits
-            r2_pos=2, r2_seq="ATCGAT",      # G->A at pos 2 on reverse read
+            r1_pos=0,
+            r1_seq=REF_SEQ[0:6],  # no edits
+            r2_pos=2,
+            r2_seq="ATCGAT",  # G->A at pos 2 on reverse read
         )
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
         cols = _read_lines(out)[0].split("\t")
         assert cols[4] == "2"
 
@@ -211,17 +261,25 @@ class TestBam2Fragment:
         # The fragment should list pos 4 only once.
         reads = _pair(
             "pair1",
-            r1_pos=0, r1_seq="ACGTTG",       # T at pos 4 (forward)
+            r1_pos=0,
+            r1_seq="ACGTTG",  # T at pos 4 (forward)
             # R2 reverse, covers ref 4..9 = CGATCG. With C at pos 4 changed to T,
             # we'd see a forward-style edit. But R2 is reverse, so a C->T pattern
             # on R2 isn't counted (only G->A on reverse counts). So put a normal
             # match here and rely on R1 alone for the pos-4 edit.
-            r2_pos=4, r2_seq=REF_SEQ[4:10],
+            r2_pos=4,
+            r2_seq=REF_SEQ[4:10],
         )
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
         cols = _read_lines(out)[0].split("\t")
         assert cols[4] == "4"
 
@@ -229,16 +287,28 @@ class TestBam2Fragment:
         reads = _pair("pair1", 0, "ATGTCG", 4, REF_SEQ[4:10], mapq=10)
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=20, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=20,
+            min_baseq=0,
+        )
         assert _read_lines(out) == []
 
     def test_min_baseq_filters_edit(self, tmp_path, fasta_file):
         reads = _pair("pair1", 0, "ATGTCG", 4, REF_SEQ[4:10], baseq=5)
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=20)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=20,
+        )
         cols = _read_lines(out)[0].split("\t")
         assert cols[4] == "."
 
@@ -246,32 +316,54 @@ class TestBam2Fragment:
         reads = _pair("p1", 0, "ATGTCG", 4, REF_SEQ[4:10], extra_flags=0x400)
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
         assert _read_lines(out) == []
 
     def test_single_end_fragment(self, tmp_path, fasta_file):
         read = _make_read(
-            "se1", "ATGTCG", 0,
-            is_paired=False, is_read1=False, mate_pos=None,
+            "se1",
+            "ATGTCG",
+            0,
+            is_paired=False,
+            is_read1=False,
+            mate_pos=None,
         )
         bam = _write_bam(str(tmp_path / "x.bam"), [read])
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
         cols = _read_lines(out)[0].split("\t")
         assert cols[0:3] == ["chr1", "0", "6"]
         assert cols[3] == "1"
         assert cols[4] == "1"
 
     def test_barcode_column_added_with_flag(self, tmp_path, fasta_file):
-        reads = _pair("p1", 0, "ATGTCG", 4, REF_SEQ[4:10],
-                      tags=[("CB", "AAACGT-1")])
+        reads = _pair("p1", 0, "ATGTCG", 4, REF_SEQ[4:10], tags=[("CB", "AAACGT-1")])
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0,
-                         barcode=True, barcode_tag="CB")
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+            barcode=True,
+            barcode_tag="CB",
+        )
         cols = _read_lines(out)[0].split("\t")
         # 10x ordering: chrom, start, end, barcode, count, edits
         assert len(cols) == 6
@@ -282,15 +374,20 @@ class TestBam2Fragment:
     def test_barcode_groups_by_barcode(self, tmp_path, fasta_file):
         # Same coords + edits, two different barcodes -> two rows.
         reads = []
-        reads += _pair("p1", 0, "ATGTCG", 4, REF_SEQ[4:10],
-                       tags=[("CB", "BC_A")])
-        reads += _pair("p2", 0, "ATGTCG", 4, REF_SEQ[4:10],
-                       tags=[("CB", "BC_B")])
+        reads += _pair("p1", 0, "ATGTCG", 4, REF_SEQ[4:10], tags=[("CB", "BC_A")])
+        reads += _pair("p2", 0, "ATGTCG", 4, REF_SEQ[4:10], tags=[("CB", "BC_B")])
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0,
-                         barcode=True, barcode_tag="CB")
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+            barcode=True,
+            barcode_tag="CB",
+        )
         lines = _read_lines(out)
         assert len(lines) == 2
         barcodes = sorted(line.split("\t")[3] for line in lines)
@@ -301,9 +398,16 @@ class TestBam2Fragment:
         reads = _pair("p1", 0, "ATGTCG", 4, REF_SEQ[4:10])
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file, out_dir=str(tmp_path), out_name="frag",
-                         min_mapq=0, min_baseq=0,
-                         barcode=True, barcode_tag="CB")
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+            barcode=True,
+            barcode_tag="CB",
+        )
         cols = _read_lines(out)[0].split("\t")
         assert cols[3] == "."
 
@@ -311,9 +415,15 @@ class TestBam2Fragment:
         reads = _pair("p1", 0, "ATGTCG", 4, REF_SEQ[4:10])
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv.gz")
-        run_bam2fragment(bam_path=bam, fasta_path=fasta_file,
-                         out_dir=str(tmp_path), out_name="frag", gzip=True,
-                         min_mapq=0, min_baseq=0)
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            gzip=True,
+            min_mapq=0,
+            min_baseq=0,
+        )
         assert os.path.exists(out)
         # Confirm the file is actually gzip-compressed
         with open(out, "rb") as f:

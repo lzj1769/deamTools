@@ -39,7 +39,7 @@ def get_chrom_sizes_from_file(chrom_size_file: str) -> dict[str, int]:
     chrom_sizes = {}
     with open(chrom_size_file) as f:
         for line in f:
-            parts = line.strip().split('\t')
+            parts = line.strip().split("\t")
             chrom = parts[0]
             size = int(parts[1])
             chrom_sizes[chrom] = size

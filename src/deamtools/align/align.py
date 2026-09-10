@@ -171,7 +171,7 @@ def _tag_value(fields: list[str], prefix: str) -> str | None:
     """Value of a SAM tag (e.g. ``"YC:Z:"`` or ``"AS:i:"``) in ``fields[11:]``."""
     for tag in fields[11:]:
         if tag.startswith(prefix):
-            return tag[len(prefix):]
+            return tag[len(prefix) :]
     return None
 
 

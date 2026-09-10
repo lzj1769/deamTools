@@ -46,8 +46,8 @@ class TestRunFootprint:
         assert len(rows) == 1
         chrom, start, end, name, score, pval = rows[0]
         assert (chrom, start, end, name) == ("chr1", "40", "50", "TF1")
-        assert float(score) == pytest.approx(20.0)   # 10 + 10 - 0
-        assert float(pval) < 0.05                     # clear footprint
+        assert float(score) == pytest.approx(20.0)  # 10 + 10 - 0
+        assert float(pval) < 0.05  # clear footprint
 
     def test_uniform_region_pvalue_one(self, tmp_path):
         # Uniform signal: score = level + level - level = level (here 5), but

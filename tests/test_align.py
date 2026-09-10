@@ -105,8 +105,20 @@ def _sam_line(fields: list[str]) -> str:
 class TestRestoreAlignment:
     def test_strips_f_r_prefix_from_rname_and_rnext(self):
         line = _sam_line(
-            ["r1", "0", "fchr1", "10", "60", "5M", "rchr1", "20", "0",
-             "ATGTT", "IIIII", "YS:Z:ACGTC"]
+            [
+                "r1",
+                "0",
+                "fchr1",
+                "10",
+                "60",
+                "5M",
+                "rchr1",
+                "20",
+                "0",
+                "ATGTT",
+                "IIIII",
+                "YS:Z:ACGTC",
+            ]
         )
         out = _restore_alignment(line).rstrip("\n").split("\t")
         assert out[2] == "chr1"  # RNAME prefix stripped
@@ -114,21 +126,46 @@ class TestRestoreAlignment:
 
     def test_restores_original_seq_forward(self):
         line = _sam_line(
-            ["r1", "0", "fchr1", "10", "60", "5M", "*", "0", "0",
-             "ATGTT", "IIIII", "YS:Z:ACGTC", "NM:i:1"]
+            [
+                "r1",
+                "0",
+                "fchr1",
+                "10",
+                "60",
+                "5M",
+                "*",
+                "0",
+                "0",
+                "ATGTT",
+                "IIIII",
+                "YS:Z:ACGTC",
+                "NM:i:1",
+            ]
         )
         out = _restore_alignment(line)
         fields = out.rstrip("\n").split("\t")
-        assert fields[9] == "ACGTC"      # SEQ restored from YS
-        assert "YS:Z:" not in out        # YS tag dropped
-        assert "NM:i:1" in fields        # other tags kept
+        assert fields[9] == "ACGTC"  # SEQ restored from YS
+        assert "YS:Z:" not in out  # YS tag dropped
+        assert "NM:i:1" in fields  # other tags kept
 
     def test_restores_revcomp_seq_on_reverse_strand(self):
         # Reverse-strand read: BAM SEQ is revcomp of the converted read; the
         # restored SEQ must be revcomp of the original (YS) read.
         line = _sam_line(
-            ["r1", "16", "fchr1", "10", "60", "5M", "*", "0", "0",
-             "AACAT", "IIIII", "YS:Z:ACGTC"]
+            [
+                "r1",
+                "16",
+                "fchr1",
+                "10",
+                "60",
+                "5M",
+                "*",
+                "0",
+                "0",
+                "AACAT",
+                "IIIII",
+                "YS:Z:ACGTC",
+            ]
         )
         fields = _restore_alignment(line).rstrip("\n").split("\t")
         assert fields[9] == _revcomp("ACGTC")  # "GACGT"
@@ -136,8 +173,20 @@ class TestRestoreAlignment:
     def test_hard_clip_trims_original_seq(self):
         # CIGAR 2H5M: SEQ is hard-clipped to 5 bp; restored SEQ is YS[2:7].
         line = _sam_line(
-            ["r1", "0", "chr1", "10", "60", "2H5M", "*", "0", "0",
-             "XXXXX", "IIIII", "YS:Z:ACGTCGA"]
+            [
+                "r1",
+                "0",
+                "chr1",
+                "10",
+                "60",
+                "2H5M",
+                "*",
+                "0",
+                "0",
+                "XXXXX",
+                "IIIII",
+                "YS:Z:ACGTCGA",
+            ]
         )
         fields = _restore_alignment(line).rstrip("\n").split("\t")
         assert fields[9] == "GTCGA"  # ACGTCGA[2:7]
@@ -148,8 +197,20 @@ class TestRestoreAlignment:
 
     def test_unmapped_rname_star_not_stripped(self):
         line = _sam_line(
-            ["r1", "4", "*", "0", "0", "*", "*", "0", "0",
-             "ATGTT", "IIIII", "YS:Z:ACGTC"]
+            [
+                "r1",
+                "4",
+                "*",
+                "0",
+                "0",
+                "*",
+                "*",
+                "0",
+                "0",
+                "ATGTT",
+                "IIIII",
+                "YS:Z:ACGTC",
+            ]
         )
         fields = _restore_alignment(line).rstrip("\n").split("\t")
         assert fields[2] == "*"
@@ -157,13 +218,27 @@ class TestRestoreAlignment:
 
     def test_drops_yc_tag(self):
         line = _sam_line(
-            ["r1", "0", "fchr1", "10", "60", "5M", "*", "0", "0",
-             "ATGTT", "IIIII", "YS:Z:ACGTC", "YC:Z:f", "NM:i:1"]
+            [
+                "r1",
+                "0",
+                "fchr1",
+                "10",
+                "60",
+                "5M",
+                "*",
+                "0",
+                "0",
+                "ATGTT",
+                "IIIII",
+                "YS:Z:ACGTC",
+                "YC:Z:f",
+                "NM:i:1",
+            ]
         )
         out = _restore_alignment(line)
-        assert "YC:Z:" not in out          # candidate marker dropped
-        assert "YS:Z:" not in out          # original-seq tag dropped
-        assert "NM:i:1" in out             # real tags kept
+        assert "YC:Z:" not in out  # candidate marker dropped
+        assert "YS:Z:" not in out  # original-seq tag dropped
+        assert "NM:i:1" in out  # real tags kept
         assert out.rstrip("\n").split("\t")[9] == "ACGTC"
 
 
@@ -187,9 +262,7 @@ class TestIndexResolution:
             f.write(">c\nACGT\n")
         custom = str(tmp_path / "idx" / "myref.deamtools.c2t")
         with pytest.raises(FileNotFoundError, match=r"myref\.deamtools\.c2t\.bwt"):
-            run_align(
-                fasta, "r1.fq", str(tmp_path), "out", index_path=custom
-            )
+            run_align(fasta, "r1.fq", str(tmp_path), "out", index_path=custom)
 
     def test_custom_index_path_found_proceeds_past_bwt_check(self, tmp_path):
         # With a present .bwt at the custom location, the .bwt check passes and
@@ -226,16 +299,28 @@ class TestHeaderAndStream:
             "@SQ\tSN:fchr1\tLN:1000\n"
             "@PG\tID:bwa\tPN:bwa\n"
             + _sam_line(
-                ["r1", "0", "fchr1", "10", "60", "5M", "*", "0", "0",
-                 "ATGTT", "IIIII", "YS:Z:ACGTC"]
+                [
+                    "r1",
+                    "0",
+                    "fchr1",
+                    "10",
+                    "60",
+                    "5M",
+                    "*",
+                    "0",
+                    "0",
+                    "ATGTT",
+                    "IIIII",
+                    "YS:Z:ACGTC",
+                ]
             )
         )
         sink = io.StringIO()
         _process_sam(bwa_out, sink)
         text = sink.getvalue()
-        assert "@HD" not in text          # dropped (re-emitted elsewhere)
-        assert "@SQ" not in text          # dropped (f/r contigs)
-        assert "@PG\tID:bwa" in text      # kept
+        assert "@HD" not in text  # dropped (re-emitted elsewhere)
+        assert "@SQ" not in text  # dropped (f/r contigs)
+        assert "@PG\tID:bwa" in text  # kept
         # Alignment line restored: prefix stripped + SEQ recovered.
         aln = text.strip().split("\n")[-1].split("\t")
         assert aln[2] == "chr1"
@@ -244,36 +329,128 @@ class TestHeaderAndStream:
     def test_process_sam_se_picks_higher_scoring_candidate(self):
         # Same read name, two candidates; ct has higher AS -> ct kept, ga dropped.
         ct = _sam_line(
-            ["r1", "0", "fchr1", "10", "60", "5M", "*", "0", "0",
-             "ATGTT", "IIIII", "YS:Z:ACGTC", "YC:Z:ct", "AS:i:50"]
+            [
+                "r1",
+                "0",
+                "fchr1",
+                "10",
+                "60",
+                "5M",
+                "*",
+                "0",
+                "0",
+                "ATGTT",
+                "IIIII",
+                "YS:Z:ACGTC",
+                "YC:Z:ct",
+                "AS:i:50",
+            ]
         )
         ga = _sam_line(
-            ["r1", "0", "rchr2", "20", "60", "5M", "*", "0", "0",
-             "ACATC", "IIIII", "YS:Z:ACGTC", "YC:Z:ga", "AS:i:10"]
+            [
+                "r1",
+                "0",
+                "rchr2",
+                "20",
+                "60",
+                "5M",
+                "*",
+                "0",
+                "0",
+                "ACATC",
+                "IIIII",
+                "YS:Z:ACGTC",
+                "YC:Z:ga",
+                "AS:i:10",
+            ]
         )
         sink = io.StringIO()
         _process_sam(io.StringIO(ct + ga), sink)
         lines = [ln for ln in sink.getvalue().splitlines() if ln]
-        assert len(lines) == 1                 # only the winning candidate
+        assert len(lines) == 1  # only the winning candidate
         fields = lines[0].split("\t")
-        assert fields[2] == "chr1"             # ct candidate (fchr1 -> chr1)
+        assert fields[2] == "chr1"  # ct candidate (fchr1 -> chr1)
         assert "YC:Z:" not in lines[0]
         assert fields[9] == "ACGTC"
 
     def test_process_sam_pe_picks_best_orientation(self):
         # Orientation r (40+40) beats f (10+10); both mates of r are kept.
-        f1 = _sam_line(["p", "65", "fchr1", "10", "60", "5M", "=", "30", "25",
-                        "ATGTT", "IIIII", "YS:Z:ACGTC", "YC:Z:f", "AS:i:10"])
-        f2 = _sam_line(["p", "129", "fchr1", "30", "60", "5M", "=", "10", "-25",
-                        "ACATC", "IIIII", "YS:Z:ACGTC", "YC:Z:f", "AS:i:10"])
-        r1 = _sam_line(["p", "65", "rchr1", "10", "60", "5M", "=", "30", "25",
-                        "ACATC", "IIIII", "YS:Z:ACGTC", "YC:Z:r", "AS:i:40"])
-        r2 = _sam_line(["p", "129", "rchr1", "30", "60", "5M", "=", "10", "-25",
-                        "ATGTT", "IIIII", "YS:Z:ACGTC", "YC:Z:r", "AS:i:40"])
+        f1 = _sam_line(
+            [
+                "p",
+                "65",
+                "fchr1",
+                "10",
+                "60",
+                "5M",
+                "=",
+                "30",
+                "25",
+                "ATGTT",
+                "IIIII",
+                "YS:Z:ACGTC",
+                "YC:Z:f",
+                "AS:i:10",
+            ]
+        )
+        f2 = _sam_line(
+            [
+                "p",
+                "129",
+                "fchr1",
+                "30",
+                "60",
+                "5M",
+                "=",
+                "10",
+                "-25",
+                "ACATC",
+                "IIIII",
+                "YS:Z:ACGTC",
+                "YC:Z:f",
+                "AS:i:10",
+            ]
+        )
+        r1 = _sam_line(
+            [
+                "p",
+                "65",
+                "rchr1",
+                "10",
+                "60",
+                "5M",
+                "=",
+                "30",
+                "25",
+                "ACATC",
+                "IIIII",
+                "YS:Z:ACGTC",
+                "YC:Z:r",
+                "AS:i:40",
+            ]
+        )
+        r2 = _sam_line(
+            [
+                "p",
+                "129",
+                "rchr1",
+                "30",
+                "60",
+                "5M",
+                "=",
+                "10",
+                "-25",
+                "ATGTT",
+                "IIIII",
+                "YS:Z:ACGTC",
+                "YC:Z:r",
+                "AS:i:40",
+            ]
+        )
         sink = io.StringIO()
         _process_sam(io.StringIO(f1 + f2 + r1 + r2), sink)
         lines = [ln for ln in sink.getvalue().splitlines() if ln]
-        assert len(lines) == 2                 # both mates of the winner only
+        assert len(lines) == 2  # both mates of the winner only
         for ln in lines:
             assert ln.split("\t")[2] == "chr1"  # rchr1 -> chr1
             assert "YC:Z:" not in ln

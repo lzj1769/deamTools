@@ -151,9 +151,7 @@ def _get_total_coverage(
         ACGT read coverage at each base in the region.
     """
     width = end - start
-    a, c, g, t = bam.count_coverage(
-        chrom, start, end, quality_threshold=min_baseq
-    )
+    a, c, g, t = bam.count_coverage(chrom, start, end, quality_threshold=min_baseq)
     cov = np.array(a, dtype=np.float32)
     cov += np.array(c, dtype=np.float32)
     cov += np.array(g, dtype=np.float32)
@@ -386,9 +384,7 @@ def run_bam2bw(
     chrom_order = {c: i for i, c in enumerate(chrom_sizes)}
     regions.sort(key=lambda r: (chrom_order[r[0]], r[1], r[2]))
 
-    logger.info(
-        f"Processing {len(regions)} region(s) with {threads} thread(s)"
-    )
+    logger.info(f"Processing {len(regions)} region(s) with {threads} thread(s)")
 
     os.makedirs(out_dir, exist_ok=True)
 

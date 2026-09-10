@@ -14,9 +14,18 @@ import pandas as pd
 # Per the UCSC BED spec a record has 3 required and up to 9 optional columns.
 # https://en.wikipedia.org/wiki/BED_(file_format)
 BED_COLUMNS: tuple[str, ...] = (
-    "chrom", "start", "end", "name", "score", "strand",
-    "thickStart", "thickEnd", "itemRgb",
-    "blockCount", "blockSizes", "blockStarts",
+    "chrom",
+    "start",
+    "end",
+    "name",
+    "score",
+    "strand",
+    "thickStart",
+    "thickEnd",
+    "itemRgb",
+    "blockCount",
+    "blockSizes",
+    "blockStarts",
 )
 
 
@@ -74,7 +83,8 @@ def _load_regions(bed_path: str) -> pd.DataFrame:
     """
     with open(bed_path) as f:
         cleaned = "".join(
-            line for line in f
+            line
+            for line in f
             if line.strip() and not line.startswith(("#", "track", "browser"))
         )
 

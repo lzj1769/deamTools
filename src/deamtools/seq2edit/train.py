@@ -191,16 +191,14 @@ def run_train(
     # --- model / optimiser --------------------------------------------------
     dev = _select_device(device)
     logger.info("Training on device: %s", dev)
-    model = EditNet(
-        seq_len=seq_len, n_filters=n_filters, kernel_size=kernel_size
-    ).to(dev)
+    model = EditNet(seq_len=seq_len, n_filters=n_filters, kernel_size=kernel_size).to(
+        dev
+    )
     # The model outputs a positive Poisson rate (lambda) via Softplus, so the
     # loss receives lambda directly (log_input=False). full=False drops the
     # data-only Stirling term, which does not affect the gradients.
     loss_fn = nn.PoissonNLLLoss(log_input=False, full=False)
-    optimizer = torch.optim.Adam(
-        model.parameters(), lr=lr, weight_decay=weight_decay
-    )
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", patience=lr_patience, min_lr=min_lr
     )

@@ -364,8 +364,7 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         default=1_000_000.0,
         metavar="FLOAT",
         help=(
-            "Target total for --normalize (1e6 = per-million). "
-            "Default: %(default)s."
+            "Target total for --normalize (1e6 = per-million). " "Default: %(default)s."
         ),
     )
 

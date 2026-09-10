@@ -136,7 +136,7 @@ class TestLoadRegions:
     def test_track_and_browser_lines_skipped(self, tmp_path):
         bed = tmp_path / "r.bed"
         bed.write_text(
-            'browser position chr1:1-1000\n'
+            "browser position chr1:1-1000\n"
             'track name="x" description="y"\n'
             "chr1\t0\t5\n"
         )
@@ -179,7 +179,9 @@ class TestLoadRegions:
 # ---------------------------------------------------------------------------
 
 
-def _run_count_region(bam_path, fasta_file, regions, *, min_mapq, min_baseq, extend_size):
+def _run_count_region(
+    bam_path, fasta_file, regions, *, min_mapq, min_baseq, extend_size
+):
     """Stitch per-region count signal into a full-chromosome array.
 
     Lets the legacy tests in :class:`TestCountDeamination` keep asserting on
@@ -205,16 +207,30 @@ def _run_count_region(bam_path, fasta_file, regions, *, min_mapq, min_baseq, ext
         for i, v in enumerate(sig):
             out[start + i] = float(v)
     import numpy as _np
+
     return _np.array(out, dtype=_np.float32)
 
 
 class TestCountDeamination:
     """Unit tests for the per-region count signal."""
 
-    def _run(self, bam_path, fasta_file, *, regions=None, min_mapq=0, min_baseq=0, extend_size=0):
+    def _run(
+        self,
+        bam_path,
+        fasta_file,
+        *,
+        regions=None,
+        min_mapq=0,
+        min_baseq=0,
+        extend_size=0,
+    ):
         return _run_count_region(
-            bam_path, fasta_file, regions,
-            min_mapq=min_mapq, min_baseq=min_baseq, extend_size=extend_size,
+            bam_path,
+            fasta_file,
+            regions,
+            min_mapq=min_mapq,
+            min_baseq=min_baseq,
+            extend_size=extend_size,
         )
 
     # -- Deamination detection ------------------------------------------------
@@ -222,8 +238,9 @@ class TestCountDeamination:
     def test_forward_ct_event_detected(self, tmp_path, fasta_file):
         # REF:  A C G T C G A T C G
         # READ: A T G T C G A T C G  ← C→T at pos 1
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0)]
+        )
         counts = self._run(bam, fasta_file)
         assert counts[1] == 1.0
         assert counts.sum() == 1.0
@@ -234,15 +251,16 @@ class TestCountDeamination:
         #   normal rev-comp of REF = "CGATCGACGT"
         #   with deamination at ref pos 5: raw read = "CGATTGACGT"
         #   stored in BAM (rev-comp of raw) = "ACGTCAATCG"
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ACGTCAATCG", 0, 0, is_reverse=True)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"),
+            [_make_read("r1", "ACGTCAATCG", 0, 0, is_reverse=True)],
+        )
         counts = self._run(bam, fasta_file)
         assert counts[5] == 1.0
         assert counts.sum() == 1.0
 
     def test_no_event_on_exact_match(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", REF_SEQ, 0, 0)])
+        bam = _write_bam(str(tmp_path / "t.bam"), [_make_read("r1", REF_SEQ, 0, 0)])
         assert self._run(bam, fasta_file).sum() == 0.0
 
     def test_multiple_reads_accumulate(self, tmp_path, fasta_file):
@@ -256,8 +274,9 @@ class TestCountDeamination:
     def test_multiple_events_in_one_read(self, tmp_path, fasta_file):
         # REF:  A C G T C G A T C G
         # READ: A T G T T G A T C G  ← C→T at pos 1 and pos 4
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTTGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTTGATCG", 0, 0)]
+        )
         counts = self._run(bam, fasta_file)
         assert counts[1] == 1.0
         assert counts[4] == 1.0
@@ -266,42 +285,52 @@ class TestCountDeamination:
     # -- Filtering ------------------------------------------------------------
 
     def test_low_mapq_read_excluded(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0, mapq=10)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0, mapq=10)]
+        )
         assert self._run(bam, fasta_file, min_mapq=20).sum() == 0.0
 
     def test_mapq_at_threshold_included(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0, mapq=20)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0, mapq=20)]
+        )
         assert self._run(bam, fasta_file, min_mapq=20).sum() == 1.0
 
     def test_low_baseq_position_excluded(self, tmp_path, fasta_file):
         # baseq=5 < min_baseq=20 → the C→T event at pos 1 is not counted
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0, baseq=5)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0, baseq=5)]
+        )
         assert self._run(bam, fasta_file, min_baseq=20).sum() == 0.0
 
     def test_secondary_read_excluded(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0, extra_flags=0x100)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"),
+            [_make_read("r1", "ATGTCGATCG", 0, 0, extra_flags=0x100)],
+        )
         assert self._run(bam, fasta_file).sum() == 0.0
 
     def test_duplicate_read_excluded(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0, extra_flags=0x400)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"),
+            [_make_read("r1", "ATGTCGATCG", 0, 0, extra_flags=0x400)],
+        )
         assert self._run(bam, fasta_file).sum() == 0.0
 
     def test_supplementary_read_excluded(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0, extra_flags=0x800)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"),
+            [_make_read("r1", "ATGTCGATCG", 0, 0, extra_flags=0x800)],
+        )
         assert self._run(bam, fasta_file).sum() == 0.0
 
     # -- Region restriction ---------------------------------------------------
 
     def test_event_inside_region_counted(self, tmp_path, fasta_file):
         # C→T at pos 1 and pos 4; restrict to [0, 3) → only pos 1 counted
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTTGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTTGATCG", 0, 0)]
+        )
         counts = self._run(bam, fasta_file, regions=[(0, 3)])
         assert counts[1] == 1.0
         assert counts[4] == 0.0
@@ -309,8 +338,9 @@ class TestCountDeamination:
 
     def test_event_outside_region_excluded(self, tmp_path, fasta_file):
         # C→T at pos 1; restrict to [5, 10) → no events in region
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0)]
+        )
         counts = self._run(bam, fasta_file, regions=[(5, 10)])
         assert counts.sum() == 0.0
 
@@ -318,8 +348,9 @@ class TestCountDeamination:
 
     def test_extend_size_spreads_signal(self, tmp_path, fasta_file):
         # Single C→T at pos 1; extend_size=2 → signal at positions 0,1,2,3
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0)]
+        )
         counts = self._run(bam, fasta_file, extend_size=2)
         assert counts[0] == 1.0
         assert counts[1] == 1.0
@@ -328,8 +359,9 @@ class TestCountDeamination:
         assert counts[4] == 0.0
 
     def test_extend_size_zero_unchanged(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0)]
+        )
         counts = self._run(bam, fasta_file, extend_size=0)
         assert counts[1] == 1.0
         assert counts.sum() == 1.0
@@ -343,13 +375,22 @@ class TestCountDeamination:
 class TestRunBam2bw:
     """End-to-end tests that write a real BigWig and check its content."""
 
-    def test_bigwig_created_with_correct_signal(self, tmp_path, fasta_file, chrom_sizes_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0)])
+    def test_bigwig_created_with_correct_signal(
+        self, tmp_path, fasta_file, chrom_sizes_file
+    ):
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0)]
+        )
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
-                   out_dir=str(tmp_path), out_name="out",
-                   chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0)
+        run_bam2bw(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="out",
+            chrom_sizes_path=chrom_sizes_file,
+            min_mapq=0,
+            min_baseq=0,
+        )
 
         assert os.path.exists(out)
         with pyBigWig.open(out) as bw:
@@ -358,76 +399,124 @@ class TestRunBam2bw:
             # No event at pos 0
             assert bw.stats("chr1", 0, 1, type="mean")[0] is None
 
-    def test_normalize_count_scales_by_total(self, tmp_path, fasta_file, chrom_sizes_file):
+    def test_normalize_count_scales_by_total(
+        self, tmp_path, fasta_file, chrom_sizes_file
+    ):
         # Read with C->T at pos 1 and pos 4 -> 2 edits genome-wide.
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTTGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTTGATCG", 0, 0)]
+        )
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
-                   out_dir=str(tmp_path), out_name="out",
-                   chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0,
-                   normalize=True, scale_factor=10.0)
+        run_bam2bw(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="out",
+            chrom_sizes_path=chrom_sizes_file,
+            min_mapq=0,
+            min_baseq=0,
+            normalize=True,
+            scale_factor=10.0,
+        )
 
         with pyBigWig.open(out) as bw:
             # raw count 1 -> 1 * scale_factor / total = 1 * 10 / 2 = 5.0
             assert bw.stats("chr1", 1, 2, type="mean")[0] == pytest.approx(5.0)
             assert bw.stats("chr1", 4, 5, type="mean")[0] == pytest.approx(5.0)
 
-    def test_normalize_ignored_in_ratio_mode(self, tmp_path, fasta_file, chrom_sizes_file):
+    def test_normalize_ignored_in_ratio_mode(
+        self, tmp_path, fasta_file, chrom_sizes_file
+    ):
         # 1 edit (T) + 1 ref C at pos 1 -> ratio 0.5; --normalize must not change it.
-        reads = [_make_read("r1", "ATGTCGATCG", 0, 0),
-                 _make_read("r2", REF_SEQ, 0, 0)]
+        reads = [_make_read("r1", "ATGTCGATCG", 0, 0), _make_read("r2", REF_SEQ, 0, 0)]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
-                   out_dir=str(tmp_path), out_name="out",
-                   chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0,
-                   mode="ratio", min_coverage=0, normalize=True, scale_factor=10.0)
+        run_bam2bw(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="out",
+            chrom_sizes_path=chrom_sizes_file,
+            min_mapq=0,
+            min_baseq=0,
+            mode="ratio",
+            min_coverage=0,
+            normalize=True,
+            scale_factor=10.0,
+        )
         with pyBigWig.open(out) as bw:
             assert bw.stats("chr1", 1, 2, type="mean")[0] == pytest.approx(0.5)
 
     def test_infer_chrom_sizes_from_bam(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0)]
+        )
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
-                   out_dir=str(tmp_path), out_name="out",
-                   chrom_sizes_path=None, min_mapq=0, min_baseq=0)
+        run_bam2bw(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="out",
+            chrom_sizes_path=None,
+            min_mapq=0,
+            min_baseq=0,
+        )
         assert os.path.exists(out)
 
     def test_bed_restricts_output_signal(self, tmp_path, fasta_file, chrom_sizes_file):
         # C→T at pos 1 and pos 4; BED restricts to [0, 3)
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTTGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTTGATCG", 0, 0)]
+        )
         bed = tmp_path / "r.bed"
         bed.write_text("chr1\t0\t3\n")
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
-                   out_dir=str(tmp_path), out_name="out",
-                   chrom_sizes_path=chrom_sizes_file, bed_path=str(bed),
-                   min_mapq=0, min_baseq=0)
+        run_bam2bw(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="out",
+            chrom_sizes_path=chrom_sizes_file,
+            bed_path=str(bed),
+            min_mapq=0,
+            min_baseq=0,
+        )
 
         with pyBigWig.open(out) as bw:
             assert bw.stats("chr1", 1, 2, type="mean")[0] == pytest.approx(1.0)
             assert bw.stats("chr1", 4, 5, type="mean")[0] is None
 
-    def test_output_parent_directory_created(self, tmp_path, fasta_file, chrom_sizes_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", REF_SEQ, 0, 0)])
+    def test_output_parent_directory_created(
+        self, tmp_path, fasta_file, chrom_sizes_file
+    ):
+        bam = _write_bam(str(tmp_path / "t.bam"), [_make_read("r1", REF_SEQ, 0, 0)])
         out = str(tmp_path / "nested" / "dir" / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
-                   out_dir=str(tmp_path / "nested" / "dir"), out_name="out",
-                   chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0)
+        run_bam2bw(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path / "nested" / "dir"),
+            out_name="out",
+            chrom_sizes_path=chrom_sizes_file,
+            min_mapq=0,
+            min_baseq=0,
+        )
         assert os.path.exists(out)
 
-    def test_no_events_writes_empty_bigwig(self, tmp_path, fasta_file, chrom_sizes_file):
+    def test_no_events_writes_empty_bigwig(
+        self, tmp_path, fasta_file, chrom_sizes_file
+    ):
         # Read identical to reference → no deamination events
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", REF_SEQ, 0, 0)])
+        bam = _write_bam(str(tmp_path / "t.bam"), [_make_read("r1", REF_SEQ, 0, 0)])
         out = str(tmp_path / "out.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
-                   out_dir=str(tmp_path), out_name="out",
-                   chrom_sizes_path=chrom_sizes_file, min_mapq=0, min_baseq=0)
+        run_bam2bw(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="out",
+            chrom_sizes_path=chrom_sizes_file,
+            min_mapq=0,
+            min_baseq=0,
+        )
 
         assert os.path.exists(out)
         with pyBigWig.open(out) as bw:
@@ -463,13 +552,16 @@ class TestRatioMode:
         return signal
 
     def test_invalid_mode_raises(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", REF_SEQ, 0, 0)])
+        bam = _write_bam(str(tmp_path / "t.bam"), [_make_read("r1", REF_SEQ, 0, 0)])
         with pytest.raises(ValueError, match="mode"):
             run_bam2bw(
-                bam_path=bam, fasta_path=fasta_file,
-                out_dir=str(tmp_path), out_name="out",
-                min_mapq=0, min_baseq=0, mode="bogus",
+                bam_path=bam,
+                fasta_path=fasta_file,
+                out_dir=str(tmp_path),
+                out_name="out",
+                min_mapq=0,
+                min_baseq=0,
+                mode="bogus",
             )
 
     def test_ratio_three_quarters_at_C(self, tmp_path, fasta_file):
@@ -479,7 +571,7 @@ class TestRatioMode:
             _make_read("r1", "ATGTCGATCG", 0, 0),
             _make_read("r2", "ATGTCGATCG", 0, 0),
             _make_read("r3", "ATGTCGATCG", 0, 0),
-            _make_read("r4", REF_SEQ,      0, 0),
+            _make_read("r4", REF_SEQ, 0, 0),
         ]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
         ratio = self._run(bam, fasta_file)
@@ -500,8 +592,7 @@ class TestRatioMode:
         assert ratio[1] == pytest.approx(0.5)
 
     def test_ratio_zero_when_no_edits(self, tmp_path, fasta_file):
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", REF_SEQ, 0, 0)])
+        bam = _write_bam(str(tmp_path / "t.bam"), [_make_read("r1", REF_SEQ, 0, 0)])
         ratio = self._run(bam, fasta_file)
         assert (ratio == 0.0).all()
 
@@ -511,8 +602,8 @@ class TestRatioMode:
         # Total coverage at pos 2 = 3, events = 2, ratio = 2/3.
         seq = "ACATCGATCG"  # A at pos 2 (G->A reference mismatch)
         reads = [
-            _make_read("r1", seq,     0, 0, is_reverse=True),
-            _make_read("r2", seq,     0, 0, is_reverse=True),
+            _make_read("r1", seq, 0, 0, is_reverse=True),
+            _make_read("r2", seq, 0, 0, is_reverse=True),
             _make_read("r3", REF_SEQ, 0, 0, is_reverse=True),
         ]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
@@ -523,8 +614,9 @@ class TestRatioMode:
         # Per the reference algorithm, --extend_size only applies to count
         # mode. With a single C->T at pos 1 and extend_size=2, the ratio
         # mode signal must still be non-zero only at pos 1 (the editing site).
-        bam = _write_bam(str(tmp_path / "t.bam"),
-                         [_make_read("r1", "ATGTCGATCG", 0, 0)])
+        bam = _write_bam(
+            str(tmp_path / "t.bam"), [_make_read("r1", "ATGTCGATCG", 0, 0)]
+        )
         ratio = self._run(bam, fasta_file, extend_size=2)
         assert ratio[1] == pytest.approx(1.0)
         # Neighbouring bases stay at zero -- no convolution / extension.
@@ -532,7 +624,9 @@ class TestRatioMode:
         assert ratio[2] == 0.0
         assert ratio[3] == 0.0
 
-    def test_min_coverage_threshold_masks_low_coverage_positions(self, tmp_path, fasta_file):
+    def test_min_coverage_threshold_masks_low_coverage_positions(
+        self, tmp_path, fasta_file
+    ):
         # 3 reads, all with C->T at pos 1. Total coverage = 3.
         reads = [_make_read(f"r{i}", "ATGTCGATCG", 0, 0) for i in range(3)]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
@@ -547,13 +641,20 @@ class TestRatioMode:
         reads = [
             _make_read("r1", "ATGTCGATCG", 0, 0),  # T at C (event)
             _make_read("r2", "ATGTCGATCG", 0, 0),  # T at C (event)
-            _make_read("r3", REF_SEQ,      0, 0),  # C at C (coverage only)
+            _make_read("r3", REF_SEQ, 0, 0),  # C at C (coverage only)
         ]
         bam = _write_bam(str(tmp_path / "t.bam"), reads)
         out = str(tmp_path / "ratio.bw")
-        run_bam2bw(bam_path=bam, fasta_path=fasta_file,
-                   out_dir=str(tmp_path), out_name="ratio",
-                   chrom_sizes_path=chrom_sizes_file,
-                   min_mapq=0, min_baseq=0, mode="ratio", min_coverage=0)
+        run_bam2bw(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="ratio",
+            chrom_sizes_path=chrom_sizes_file,
+            min_mapq=0,
+            min_baseq=0,
+            mode="ratio",
+            min_coverage=0,
+        )
         with pyBigWig.open(out) as bw:
             assert bw.stats("chr1", 1, 2, type="mean")[0] == pytest.approx(2.0 / 3.0)

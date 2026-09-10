@@ -78,9 +78,7 @@ def _score_chrom(
                 skipped += 1
                 continue
 
-            signal = np.nan_to_num(
-                np.asarray(bw.values(chrom, lo, hi), dtype=float)
-            )
+            signal = np.nan_to_num(np.asarray(bw.values(chrom, lo, hi), dtype=float))
             fp_score = _footprint_score(signal, motif_length)
 
             if fp_score <= 0:
@@ -175,8 +173,6 @@ def run_footprint(
                 n_written += 1
 
     if total_skipped:
-        logger.info(
-            f"  skipped {total_skipped} region(s) out of bounds / zero-length"
-        )
+        logger.info(f"  skipped {total_skipped} region(s) out of bounds / zero-length")
     logger.info(f"  wrote {n_written} footprint(s)")
     logger.info("Done")
