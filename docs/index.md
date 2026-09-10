@@ -70,7 +70,7 @@ DeamTools is organised as a set of subcommands, run as `deamtools <command>`:
 | [`bam2bw`](usage/bam2bw.md) | Convert a BAM to a per-base BigWig of editing counts or conversion ratios. |
 | [`bam2fragment`](usage/bam2fragment.md) | Convert a BAM to a per-fragment editing-signal table (bulk or single-cell). |
 | [`qc`](usage/qc.md) | Quality-control metrics — including the deaminase sequence-motif logo — in a self-contained HTML report. |
-| [`match`](usage/match.md) | Scan regions for TF motif matches (MOODS) and write a BED of binding sites. |
+| [`match`](usage/match.md) | Scan regions for TF motif matches (motifmatchpy) and write a BED of binding sites. |
 | [`footprint`](usage/footprint.md) | Score TF footprints at motif sites from a BigWig (flank-vs-centre depletion). |
 | [`seq2edit`](usage/seq2edit.md) | Train a CNN that maps DNA sequence to per-base editing (the deaminase sequence bias). |
 

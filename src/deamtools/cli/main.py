@@ -641,7 +641,7 @@ def _add_match_parser(subparsers: argparse._SubParsersAction) -> None:
         ),
         description=(
             "Scan the reference sequence of a set of regions (e.g. peaks) for\n"
-            "transcription-factor motif occurrences using MOODS, and write the\n"
+            "transcription-factor motif occurrences using motifmatchpy, and write the\n"
             "hits as a BED of motif-predicted binding sites.\n"
             "\n"
             "Each motif's count matrix is converted to a log-odds matrix against\n"
@@ -690,6 +690,17 @@ def _add_match_parser(subparsers: argparse._SubParsersAction) -> None:
         help=(
             "Base name (without extension) for the output; writes "
             "<out_dir>/<out_name>.bed."
+        ),
+    )
+    parser.add_argument(
+        "--motif_files",
+        nargs="+",
+        metavar="FILE",
+        help=(
+            "Motif files to scan with (.pfm position frequency matrices, .adm "
+            "adjacent dinucleotide models). Each motif is named after its file "
+            "stem. Takes precedence over the JASPAR options below, and avoids "
+            "needing pyjaspar."
         ),
     )
     parser.add_argument(
@@ -1098,6 +1109,7 @@ def _run_match(args: argparse.Namespace) -> int:
         bed_path=args.regions,
         out_dir=args.out_dir,
         out_name=args.out_name,
+        motif_files=args.motif_files,
         release=args.jaspar_release,
         collection=args.collection,
         tax_group=args.tax_group,

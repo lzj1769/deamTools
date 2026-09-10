@@ -1,15 +1,17 @@
-"""Tests for deamtools.motif.match (MOODS scanning).
+"""Tests for deamtools.motif.match (motifmatchpy scanning).
 
-These build motifs in memory (no JASPAR/pyjaspar needed); MOODS is a hard
-dependency of the package.
+These build motifs in memory (no JASPAR/pyjaspar needed); motifmatchpy is a
+hard dependency of the package.
 """
 
 import os
 from types import SimpleNamespace
 
 import pysam
+import pytest
 
 from deamtools.motif.match import (
+    load_motifs_from_files,
     prepare_scanner,
     run_motif_matching,
     scan_sequence,
@@ -30,7 +32,7 @@ class TestScanSequence:
         motif = _motif("AAACCC")
         scanner = prepare_scanner([motif], p_value=1e-3)
         # AAACCC sits at offset 2 within the sequence.
-        matches = scan_sequence(scanner, [motif], "TTAAACCCTT", "chr1", offset=0)
+        matches = scan_sequence(scanner, "TTAAACCCTT", "chr1", offset=0)
         plus = [m for m in matches if m[5] == "+"]
         assert len(plus) == 1
         chrom, start, end, name, score, strand = plus[0]
@@ -41,7 +43,7 @@ class TestScanSequence:
     def test_offset_is_added_to_position(self):
         motif = _motif("AAACCC")
         scanner = prepare_scanner([motif], p_value=1e-3)
-        matches = scan_sequence(scanner, [motif], "TTAAACCCTT", "chr1", offset=1000)
+        matches = scan_sequence(scanner, "TTAAACCCTT", "chr1", offset=1000)
         plus = [m for m in matches if m[5] == "+"]
         assert plus[0][1] == 1002 and plus[0][2] == 1008
 
@@ -50,7 +52,7 @@ class TestScanSequence:
         # sequence yields a minus-strand hit.
         motif = _motif("AAACCC")
         scanner = prepare_scanner([motif], p_value=1e-3)
-        matches = scan_sequence(scanner, [motif], "TTGGGTTTTT", "chr1")
+        matches = scan_sequence(scanner, "TTGGGTTTTT", "chr1")
         minus = [m for m in matches if m[5] == "-"]
         assert len(minus) == 1
         assert (minus[0][1], minus[0][2]) == (2, 8)
@@ -58,7 +60,7 @@ class TestScanSequence:
     def test_no_match_returns_empty(self):
         motif = _motif("AAACCC")
         scanner = prepare_scanner([motif], p_value=1e-3)
-        matches = scan_sequence(scanner, [motif], "TTTTTTTTTT", "chr1")
+        matches = scan_sequence(scanner, "TTTTTTTTTT", "chr1")
         assert matches == []
 
 
@@ -79,8 +81,12 @@ class TestRunMotifMatching:
         out = str(tmp_path / "mpbs.bed")
 
         run_motif_matching(
-            fasta, str(bed), str(tmp_path), "mpbs",
-            motifs=[_motif("AAACCC")], p_value=1e-3,
+            fasta,
+            str(bed),
+            str(tmp_path),
+            "mpbs",
+            motifs=[_motif("AAACCC")],
+            p_value=1e-3,
         )
 
         lines = [ln for ln in open(out).read().splitlines() if ln]
@@ -101,13 +107,15 @@ class TestRunMotifMatching:
         out = str(tmp_path / "mpbs.bed")
 
         run_motif_matching(
-            fasta, str(bed), str(tmp_path), "mpbs",
-            motifs=[_motif("AAACCC")], p_value=1e-3,
+            fasta,
+            str(bed),
+            str(tmp_path),
+            "mpbs",
+            motifs=[_motif("AAACCC")],
+            p_value=1e-3,
         )
         plus = [
-            ln.split("\t")
-            for ln in open(out).read().splitlines()
-            if ln.endswith("+")
+            ln.split("\t") for ln in open(out).read().splitlines() if ln.endswith("+")
         ]
         assert plus and plus[0][1] == "103" and plus[0][2] == "109"
 
@@ -117,7 +125,85 @@ class TestRunMotifMatching:
         bed.write_text("chr1\t0\t16\n")
         out = str(tmp_path / "sub" / "dir" / "mpbs.bed")
         run_motif_matching(
-            fasta, str(bed), str(tmp_path / "sub" / "dir"), "mpbs",
-            motifs=[_motif("AAACCC")], p_value=1e-3,
+            fasta,
+            str(bed),
+            str(tmp_path / "sub" / "dir"),
+            "mpbs",
+            motifs=[_motif("AAACCC")],
+            p_value=1e-3,
         )
         assert os.path.exists(out)
+
+
+def _write_pfm(path, consensus, peak=100):
+    """A PFM whose consensus is `consensus`, in the 4-row A/C/G/T layout."""
+    rows = []
+    for base in "ACGT":
+        rows.append(" ".join(str(peak if b == base else 0) for b in consensus))
+    path.write_text("\n".join(rows) + "\n")
+    return str(path)
+
+
+class TestMotifFiles:
+    def test_name_comes_from_the_file_stem(self, tmp_path):
+        path = _write_pfm(tmp_path / "MA0001.1.pfm", "AAACCC")
+        (motif,) = load_motifs_from_files([path])
+        assert motif.name == "MA0001.1"
+        assert motif.length == 6
+
+    def test_missing_file_is_reported_before_parsing(self, tmp_path):
+        good = _write_pfm(tmp_path / "ok.pfm", "AAACCC")
+        with pytest.raises(FileNotFoundError, match="nope.pfm"):
+            load_motifs_from_files([good, str(tmp_path / "nope.pfm")])
+
+    def test_file_motifs_scan_like_count_motifs(self, tmp_path):
+        """A PFM file and the equivalent in-memory motif must agree."""
+        path = _write_pfm(tmp_path / "AAACCC.pfm", "AAACCC")
+        from_file = prepare_scanner(load_motifs_from_files([path]), p_value=1e-3)
+        from_counts = prepare_scanner([_motif("AAACCC", name="AAACCC")], p_value=1e-3)
+        a = scan_sequence(from_file, "TTAAACCCTT", "chr1")
+        b = scan_sequence(from_counts, "TTAAACCCTT", "chr1")
+        assert [(x[1], x[2], x[5]) for x in a] == [(x[1], x[2], x[5]) for x in b]
+
+    def test_run_motif_matching_accepts_motif_files(self, tmp_path):
+        fasta = tmp_path / "g.fa"
+        fasta.write_text(">chr1\n" + "TT" + "AAACCC" + "TT" * 20 + "\n")
+        pysam.faidx(str(fasta))
+        bed = tmp_path / "r.bed"
+        bed.write_text("chr1\t0\t48\n")
+        path = _write_pfm(tmp_path / "EBOX.pfm", "AAACCC")
+
+        run_motif_matching(
+            fasta_path=str(fasta),
+            bed_path=str(bed),
+            out_dir=str(tmp_path / "out"),
+            out_name="hits",
+            motif_files=[path],
+            p_value=1e-3,
+        )
+        lines = (tmp_path / "out" / "hits.bed").read_text().splitlines()
+        assert lines
+        assert all(line.split("\t")[3] == "EBOX" for line in lines)
+
+    def test_motif_files_take_precedence_over_motifs(self, tmp_path):
+        fasta = tmp_path / "g.fa"
+        fasta.write_text(">chr1\n" + "TTAAACCCTT" + "\n")
+        pysam.faidx(str(fasta))
+        bed = tmp_path / "r.bed"
+        bed.write_text("chr1\t0\t10\n")
+        path = _write_pfm(tmp_path / "FROMFILE.pfm", "AAACCC")
+
+        run_motif_matching(
+            fasta_path=str(fasta),
+            bed_path=str(bed),
+            out_dir=str(tmp_path / "out"),
+            out_name="hits",
+            motifs=[_motif("AAACCC", name="FROMMEMORY")],
+            motif_files=[path],
+            p_value=1e-3,
+        )
+        names = {
+            line.split("\t")[3]
+            for line in (tmp_path / "out" / "hits.bed").read_text().splitlines()
+        }
+        assert names == {"FROMFILE"}

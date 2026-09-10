@@ -1,25 +1,34 @@
-"""Motif matching against a reference genome with MOODS.
+"""Motif matching against a reference genome with motifmatchpy.
 
 Scans the sequence of a set of genomic regions (e.g. accessible peaks) for
 occurrences of transcription-factor motifs and writes the hits as a BED file of
-motif-predicted binding sites (MPBSs). Scanning uses MOODS: log-odds matrices,
-p-value-derived score thresholds, and reverse-complement matrices for both
-strands.
+motif-predicted binding sites (MPBSs). Scanning uses `motifmatchpy
+<https://github.com/lzj1769/motifmatchpy>`_: log-odds matrices, p-value-derived
+score thresholds, and both strands.
+
+motifmatchpy replaced MOODS here. Its scanner takes both strands itself and
+returns hits already carrying a motif name, an end coordinate and a strand, so
+the reverse-complement matrices, the ``[fwd_0..fwd_n, rc_0..rc_n]`` layout and
+the index arithmetic that recovered a hit's motif and strand are all gone.
+Scores and coordinates are unchanged: both use the same log-odds construction
+and report positions on the forward strand.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
-import MOODS.scan
-import MOODS.tools
+import motifmatchpy as mm
 import pysam
 
 from deamtools.utils import _load_regions
 
 logger = logging.getLogger(__name__)
+
+# Column order expected by the log-odds transform.
+_BASES = ("A", "C", "G", "T")
 
 
 def _get_motifs_from_jaspar(
@@ -69,19 +78,86 @@ def _get_motifs_from_jaspar(
     return motifs
 
 
+def _motif_name(motif) -> str:
+    """A BED-friendly label: ``<matrix_id>.<name>`` when both are present."""
+    matrix_id = getattr(motif, "matrix_id", None)
+    name = getattr(motif, "name", None)
+    if matrix_id and name and name != matrix_id:
+        return f"{matrix_id}.{name}"
+    return str(matrix_id or name or "motif")
+
+
+def _to_motif(motif, bg: list[float], pseudocounts: float) -> mm.Motif:
+    """Coerce a motif into a ``motifmatchpy.Motif``.
+
+    An ``mm.Motif`` (e.g. from :func:`load_motifs_from_files`) already holds a
+    log-odds matrix and is returned unchanged. Anything else is treated as a
+    JASPAR-style count matrix: any object exposing ``.counts`` with ``"A"``/
+    ``"C"``/``"G"``/``"T"`` keys, which is what ``pyjaspar`` returns, whose
+    counts are turned into a log-odds matrix against ``bg``.
+    """
+    if isinstance(motif, mm.Motif):
+        return motif
+    counts = tuple(tuple(motif.counts[base]) for base in _BASES)
+    matrix = mm.tools.log_odds(counts, bg, pseudocounts)
+    return mm.Motif(_motif_name(motif), matrix)
+
+
+def load_motifs_from_files(
+    paths: Sequence[str], pseudocounts: float = 0.0001
+) -> list[mm.Motif]:
+    """Read motifs from PFM/ADM files.
+
+    Each motif is named after its file stem, so ``MA0001.1.pfm`` becomes
+    ``MA0001.1`` in the BED ``name`` column. motifmatchpy would otherwise use
+    the full filename, extension included.
+
+    Parameters
+    ----------
+    paths : sequence of str
+        Motif files. ``.pfm`` is a position frequency matrix (order 0);
+        ``.adm`` is an adjacent dinucleotide model (order 1).
+    pseudocounts : float
+        Pseudocount added in the log-odds transform, matching what
+        :func:`prepare_scanner` applies to JASPAR motifs.
+
+    Returns
+    -------
+    list[motifmatchpy.Motif]
+        Motifs ready to pass to :func:`prepare_scanner` or
+        :func:`run_motif_matching`.
+
+    Raises
+    ------
+    FileNotFoundError
+        If any path does not exist. Checked up front, so a typo in a long list
+        fails before any parsing work.
+    """
+    missing = [p for p in paths if not os.path.isfile(p)]
+    if missing:
+        raise FileNotFoundError(f"motif file(s) not found: {', '.join(missing)}")
+
+    names = [os.path.splitext(os.path.basename(p))[0] for p in paths]
+    motifs = mm.read_motifs(
+        list(paths),
+        bg=mm.tools.flat_bg(4),
+        pseudocount=pseudocounts,
+        names=names,
+    )
+    logger.info(f"Loaded {len(motifs)} motif(s) from {len(paths)} file(s)")
+    return motifs
+
+
 def prepare_scanner(
     motifs: list,
     pseudocounts: float = 0.0001,
     p_value: float = 5e-05,
-) -> MOODS.scan.Scanner:
-    """Build a MOODS scanner for a list of motifs.
+) -> mm.MotifScanner:
+    """Build a motif scanner for a list of motifs.
 
     Each motif's count matrix is converted to a log-odds matrix against a flat
-    background, a score threshold is derived from ``p_value``, and the reverse
-    complement is added so both strands are scanned. The matrices are laid out
-    as ``[fwd_0, ..., fwd_{n-1}, rc_0, ..., rc_{n-1}]``, so
-    ``scanner.scan(seq)[i]`` holds the forward hits and ``[i + n]`` the
-    reverse-complement hits for motif ``i``.
+    background and a score threshold is derived from ``p_value``. The scanner
+    searches both strands.
 
     Parameters
     ----------
@@ -95,47 +171,20 @@ def prepare_scanner(
 
     Returns
     -------
-    MOODS.scan.Scanner
+    motifmatchpy.MotifScanner
         A scanner ready for :func:`scan_sequence`.
     """
-    n_motifs = len(motifs)
-    bg = MOODS.tools.flat_bg(4)
-
-    matrices = [None] * (2 * n_motifs)
-    thresholds = [None] * (2 * n_motifs)
-    for i, motif in enumerate(motifs):
-        counts = (
-            tuple(motif.counts["A"]),
-            tuple(motif.counts["C"]),
-            tuple(motif.counts["G"]),
-            tuple(motif.counts["T"]),
-        )
-        matrices[i] = MOODS.tools.log_odds(counts, bg, pseudocounts)
-        matrices[i + n_motifs] = MOODS.tools.reverse_complement(matrices[i])
-        thresholds[i] = MOODS.tools.threshold_from_p(matrices[i], bg, p_value)
-        thresholds[i + n_motifs] = thresholds[i]
-
-    scanner = MOODS.scan.Scanner(7)
-    scanner.set_motifs(matrices=matrices, bg=bg, thresholds=thresholds)
-    return scanner
-
-
-def _motif_width(motif) -> int:
-    return len(motif.counts["A"])
-
-
-def _motif_name(motif) -> str:
-    """A BED-friendly label: ``<matrix_id>.<name>`` when both are present."""
-    matrix_id = getattr(motif, "matrix_id", None)
-    name = getattr(motif, "name", None)
-    if matrix_id and name and name != matrix_id:
-        return f"{matrix_id}.{name}"
-    return str(matrix_id or name or "motif")
+    bg = mm.tools.flat_bg(4)
+    return mm.MotifScanner(
+        [_to_motif(m, bg, pseudocounts) for m in motifs],
+        p_value=p_value,
+        bg=bg,
+        both_strands=True,
+    )
 
 
 def scan_sequence(
-    scanner: MOODS.scan.Scanner,
-    motifs: list,
+    scanner: mm.MotifScanner,
     seq: str,
     chrom: str,
     offset: int = 0,
@@ -144,10 +193,8 @@ def scan_sequence(
 
     Parameters
     ----------
-    scanner : MOODS.scan.Scanner
-        Scanner from :func:`prepare_scanner` for the same ``motifs`` list.
-    motifs : list
-        The motifs the scanner was built from (defines order and width).
+    scanner : motifmatchpy.MotifScanner
+        Scanner from :func:`prepare_scanner`.
     seq : str
         DNA sequence to scan (upper-case A/C/G/T).
     chrom : str
@@ -160,21 +207,21 @@ def scan_sequence(
     -------
     list[tuple]
         ``(chrom, start, end, name, score, strand)`` per match, with half-open
-        ``[start, end)`` genomic coordinates.
+        ``[start, end)`` genomic coordinates. Positions are on the forward
+        strand for both strands' hits, so a minus-strand hit spans the same
+        interval its plus-strand counterpart would.
     """
-    results = scanner.scan(seq)
-    n_motifs = len(motifs)
-    matches: list[tuple[str, int, int, str, float, str]] = []
-    for i, motif in enumerate(motifs):
-        width = _motif_width(motif)
-        name = _motif_name(motif)
-        for strand, hits in (("+", results[i]), ("-", results[i + n_motifs])):
-            for hit in hits:
-                start = offset + int(hit.pos)
-                matches.append(
-                    (chrom, start, start + width, name, float(hit.score), strand)
-                )
-    return matches
+    return [
+        (
+            chrom,
+            offset + int(hit.pos),
+            offset + int(hit.end),
+            hit.name,
+            float(hit.score),
+            hit.strand,
+        )
+        for hit in scanner.scan(seq, sequence_name=chrom)
+    ]
 
 
 def run_motif_matching(
@@ -183,6 +230,7 @@ def run_motif_matching(
     out_dir: str,
     out_name: str,
     motifs: list | None = None,
+    motif_files: Sequence[str] | None = None,
     release: str = "JASPAR2024",
     collection: str = "CORE",
     tax_group: list[str] | None = None,
@@ -192,8 +240,8 @@ def run_motif_matching(
     """Scan BED regions for motif matches and write a BED of binding sites.
 
     For each interval in ``bed_path`` the reference sequence is read from
-    ``fasta_path`` and scanned with MOODS; every hit above the ``p_value``
-    threshold is written to ``<out_dir>/<out_name>.bed`` as a 6-column BED line
+    ``fasta_path`` and scanned; every hit above the ``p_value`` threshold is
+    written to ``<out_dir>/<out_name>.bed`` as a 6-column BED line
     ``chrom  start  end  motif  score  strand``.
 
     Parameters
@@ -208,10 +256,14 @@ def run_motif_matching(
         Base name (without extension) for the output; writes
         ``<out_dir>/<out_name>.bed``.
     motifs : list, optional
-        Pre-loaded motif objects. When ``None``, motifs are fetched from JASPAR
-        using ``release`` / ``collection`` / ``tax_group`` (needs ``pyjaspar``).
+        Pre-loaded motifs, either ``motifmatchpy.Motif`` objects or JASPAR-style
+        count matrices. Ignored when ``motif_files`` is given.
+    motif_files : sequence of str, optional
+        PFM/ADM files to read motifs from, as an alternative to querying
+        JASPAR. Takes precedence over ``motifs``.
     release, collection, tax_group : str / list[str]
-        JASPAR query parameters used when ``motifs`` is ``None``.
+        JASPAR query parameters, used only when neither ``motif_files`` nor
+        ``motifs`` is given.
     pseudocounts : float
         Pseudocount for the log-odds transform.
     p_value : float
@@ -221,14 +273,16 @@ def run_motif_matching(
     logger.info(f"FASTA:   {fasta_path}")
     logger.info(f"Regions: {bed_path}")
 
-    if motifs is None:
+    if motif_files:
+        motifs = load_motifs_from_files(motif_files, pseudocounts=pseudocounts)
+    elif motifs is None:
         motifs = _get_motifs_from_jaspar(
             release=release, collection=collection, tax_group=tax_group
         )
         if not motifs:
             raise RuntimeError(
-                "No motifs available. Install pyjaspar (pip install pyjaspar) "
-                "or pass motifs= explicitly."
+                "No motifs available. Pass --motif_files, or install pyjaspar "
+                "(pip install pyjaspar) to fetch them from JASPAR."
             )
     motifs = list(motifs)
     logger.info(f"Motifs:  {len(motifs)} (p-value {p_value})")
@@ -250,7 +304,7 @@ def run_motif_matching(
             if not seq:
                 continue
             for c, s, e, name, score, strand in scan_sequence(
-                scanner, motifs, seq, chrom, start
+                scanner, seq, chrom, start
             ):
                 out.write(f"{c}\t{s}\t{e}\t{name}\t{score:.4f}\t{strand}\n")
                 n_matches += 1

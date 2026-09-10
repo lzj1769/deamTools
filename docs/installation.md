@@ -81,7 +81,7 @@ Installed automatically by pip:
 | `logomaker` | Deaminase motif logo in the `qc` report |
 | `pysam` | BAM and FASTA I/O |
 | `pyBigWig` | BigWig reading and writing |
-| `MOODS-python` | Motif scanning (`match`) |
+| `motifmatchpy` | Motif scanning (`match`) |
 
 The `match` command additionally needs the optional `pyjaspar` package to fetch motifs from JASPAR: `pip install pyjaspar`.
 

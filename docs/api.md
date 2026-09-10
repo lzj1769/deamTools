@@ -134,7 +134,7 @@ run_motif_matching(
 ) -> None
 ```
 
-Scan the sequence of each BED region with MOODS and write motif matches to `<out_dir>/<out_name>.bed` as 6-column BED (`chrom, start, end, motif, score, strand`). Motifs are fetched from JASPAR (needs `pyjaspar`) unless `motifs` is passed explicitly.
+Scan the sequence of each BED region with motifmatchpy and write motif matches to `<out_dir>/<out_name>.bed` as 6-column BED (`chrom, start, end, motif, score, strand`). Motifs are fetched from JASPAR (needs `pyjaspar`) unless `motifs` is passed explicitly.
 
 ### `prepare_scanner` / `scan_sequence`
 
@@ -145,7 +145,7 @@ scanner = prepare_scanner(motifs, pseudocounts=0.0001, p_value=5e-05)
 matches = scan_sequence(scanner, motifs, seq, chrom, offset=0)
 ```
 
-`prepare_scanner` builds a `MOODS.scan.Scanner` (log-odds matrices, p-value thresholds, reverse complements). `scan_sequence` scans one sequence and returns `(chrom, start, end, name, score, strand)` tuples. These let you scan in-memory sequences/motifs without writing a BED.
+`load_motifs_from_files` reads `.pfm`/`.adm` files into `motifmatchpy.Motif` objects, naming each after its file stem. `prepare_scanner` builds a `motifmatchpy.MotifScanner` (log-odds matrices, p-value thresholds, both strands). `scan_sequence` scans one sequence and returns `(chrom, start, end, name, score, strand)` tuples. These let you scan in-memory sequences/motifs without writing a BED.
 
 ## `deamtools.footprint`
 
