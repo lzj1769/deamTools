@@ -93,7 +93,7 @@ def _process_chrom(
     barcode_tag: str,
 ) -> tuple[str, dict[_FragKey, int]]:
     counter: dict[_FragKey, int] = defaultdict(int)
-    buffer: dict[str, "pysam.AlignedSegment"] = {}
+    buffer: dict[str, pysam.AlignedSegment] = {}
 
     with (
         pysam.AlignmentFile(bam_path, "rb") as bam,

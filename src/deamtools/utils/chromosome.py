@@ -17,7 +17,7 @@ def get_chrom_sizes_from_bam(bam: pysam.Samfile) -> dict[str, int]:
     """
     chromosome = list(bam.references)
     lengths = list(bam.lengths)
-    chrom_sizes = dict(zip(chromosome, lengths))
+    chrom_sizes = dict(zip(chromosome, lengths, strict=True))
     return chrom_sizes
 
 

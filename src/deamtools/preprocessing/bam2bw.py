@@ -368,7 +368,9 @@ def run_bam2bw(
         bed_df = bed_df[bed_df["chrom"].isin(chrom_sizes)].reset_index(drop=True)
         regions: list[tuple[str, int, int]] = [
             (str(c), int(s), min(int(e), chrom_sizes[c]))
-            for c, s, e in zip(bed_df["chrom"], bed_df["start"], bed_df["end"])
+            for c, s, e in zip(
+                bed_df["chrom"], bed_df["start"], bed_df["end"], strict=True
+            )
         ]
         logger.info(
             f"  {len(regions)} interval(s) on "

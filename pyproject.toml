@@ -92,6 +92,11 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# black owns line length, and it does not split string literals. E501 therefore
+# only ever fires on long help text and docstrings that black deliberately
+# leaves alone, so keeping it enabled means permanent errors nobody can act on.
+# Run black to enforce the limit on everything else.
+ignore = ["E501"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

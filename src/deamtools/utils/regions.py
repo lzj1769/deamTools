@@ -118,7 +118,7 @@ def _load_regions(bed_path: str) -> pd.DataFrame:
     for chrom, group in df.groupby("chrom", sort=False):
         chrom = str(chrom)
         cur_start, cur_end = int(group.iat[0, 1]), int(group.iat[0, 2])
-        for s, e in zip(group["start"].iloc[1:], group["end"].iloc[1:]):
+        for s, e in zip(group["start"].iloc[1:], group["end"].iloc[1:], strict=True):
             s, e = int(s), int(e)
             if s <= cur_end:
                 cur_end = max(cur_end, e)
