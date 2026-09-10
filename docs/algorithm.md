@@ -47,6 +47,81 @@ Heavily edited reads align poorly to an unmodified reference, so DeamTools uses 
 
 After mapping, records are grouped by read name and the candidate with the higher primary alignment score (sum of the mates' `AS` for pairs) is kept; the original SEQ is restored from `YS`, the `f`/`r` prefix is stripped from RNAME/RNEXT, the `YS`/`YC` tags are dropped, and the BAM is sorted and indexed. Choosing one orientation per fragment keeps the mates on the same converted contig, so proper pairing is preserved.
 
+### Read space vs reference space
+
+`f` = (R1 `C→T`, R2 `G→A`) reads as though the two mates were converted
+differently. **They are not.** Each candidate is *one* conversion applied to the
+whole fragment in **reference space**; the labels differ only because R2's raw
+FASTQ sequence is the reverse complement of the reference-space sequence, and
+the conversion has to be written in the space the FASTQ is actually in.
+
+A fragment whose **top** strand was deaminated, with R1 reading its left end and
+R2 its right end:
+
+```
+reference (+)      ACGTCGATCGTTAGCCATGC
+deaminated at      *      *      *
+molecule, top      ATGTCGATTGTTAGCTATGC
+
+R1 (read space)    ATGTCGATTG               ← already reference space
+R2 (read space)              GCATAGCTAA     ← reverse complement of it
+R2 in ref space              TTAGCTATGC
+```
+
+Candidate `f` means "convert this fragment `C→T` in reference space":
+
+```
+R1   read-space C→T   ATGTTGATTG
+R2   read-space G→A   ACATAACTAA  ──bwa reverse-complements──▶  TTAGTTATGT
+R2   ref-space  C→T                                             TTAGTTATGT   ✓ identical
+```
+
+The two agree because complementing turns `G→A` into `C→T`. Formally, for any
+sequence `s`:
+
+```
+revcomp(s.replace("G", "A"))  ==  revcomp(s).replace("C", "T")
+```
+
+So `f` puts **both** mates on the `f<chrom>` contig and `r` puts both on
+`r<chrom>`. That is the whole point of the label flip: it is what keeps the pair
+on one contig.
+
+### Why there are two candidates and not four
+
+Converting each mate independently would give four combinations. The two extra
+ones are not alternative hypotheses about the molecule — they place the mates on
+*different* contigs, because a `C→T` mate goes to `f<chrom>` and a `G→A` mate to
+`r<chrom>`. Measured on 300 simulated top-strand-deaminated fragments against
+`data/test/chr20sim.deamtools.c2t`:
+
+| candidate | mates on one contig | proper pairs | mean `AS(R1)+AS(R2)` |
+|---|---|---|---|
+| `f` = (R1 `ct`, R2 `ga`) | 278/279 | 273/279 | **200.0** |
+| `r` = (R1 `ga`, R2 `ct`) | 272/279 | 226/279 | 159.2 |
+| (R1 `ct`, R2 `ct`) | 20/279 | **0/279** | 177.4 |
+| (R1 `ga`, R2 `ga`) | 19/279 | **0/279** | 176.9 |
+
+Each mate still aligns somewhere on its own, so the invalid combinations collect
+a respectable `AS` — 177.4 here, **above** the valid `r` candidate's 159.2. Adding
+them to the take-best would therefore sometimes select a cross-contig,
+non-proper pair over a correct one, and after the `f`/`r` prefix is stripped the
+two mates would land on the same chromosome name carrying mate coordinates and
+`TLEN` that mean nothing.
+
+The reason only one choice exists per fragment is biological, not a
+simplification: R1 and R2 report the *same molecule* in the same reference
+orientation, so whatever edits it carries appear in both. The conversion is a
+property of the fragment, so there is one choice to make, and take-best makes it.
+
+What take-best cannot do is absorb **both** directions at once — a
+double-stranded deaminase edits both strands, so a real fragment carries `C→T`
+and `G→A` together and neither three-letter alphabet covers both. That is a
+genuine limit of the three-letter approach, and it is why `deamtools` accuracy
+declines gently with editing rate (99.26% → 99.11% from 0% to 100% editing)
+rather than staying flat. Fixing *that* would need a different alignment model,
+not more conversion candidates.
+
 ## Edit detection conventions
 
 All commands iterate aligned positions with `pysam`'s `get_aligned_pairs(matches_only=True)`, so only matched (M/=/X) bases are compared — insertions, deletions, and clips are skipped, and query/reference bases are always directly comparable.

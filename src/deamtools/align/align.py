@@ -15,6 +15,28 @@ kept:
   whole pair: ``f`` = (read1 ``C->T``, read2 ``G->A``) and ``r`` =
   (read1 ``G->A``, read2 ``C->T``).
 
+**The two mates are not converted differently.** Each candidate is *one*
+conversion applied to the whole fragment in **reference** space; the labels
+differ only because read 2's FASTQ sequence is the reverse complement of the
+reference-space sequence, and the conversion has to be written in the space the
+FASTQ is in. Complementing turns ``G->A`` into ``C->T``, so for any sequence
+``s``::
+
+    revcomp(s.replace("G", "A")) == revcomp(s).replace("C", "T")
+
+which is exactly why read 2 carries the opposite label. That flip is what keeps
+both mates on the *same* converted contig -- ``f`` sends both to ``f<chrom>``,
+``r`` sends both to ``r<chrom>`` -- so bwa can pair them.
+
+**Do not add the other two combinations** (both mates ``ct``, or both ``ga``).
+They are not alternative hypotheses about the molecule: a ``ct`` mate maps to
+``f<chrom>`` and a ``ga`` mate to ``r<chrom>``, so those combinations split the
+pair across contigs. Measured over 300 simulated fragments, they put the mates
+on one contig 7% of the time and produce **zero** proper pairs, yet still score
+a mean ``AS(R1)+AS(R2)`` of ~177 -- above the valid ``r`` candidate's 159 -- so
+feeding them to the take-best would sometimes select a non-pair over a correct
+pair. See ``docs/algorithm.md`` for the full table.
+
 Both candidates of a read/fragment share the original read name; the candidate
 is marked with a ``YC:Z:`` tag and the original sequence stashed in ``YS:Z:``
 (both carried through ``bwa mem -C``). In post-processing, records are grouped
