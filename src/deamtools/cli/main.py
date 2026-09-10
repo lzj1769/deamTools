@@ -593,6 +593,20 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
         ),
     )
     parser.add_argument(
+        "--n_reads",
+        type=int,
+        default=None,
+        metavar="INT",
+        help=(
+            "Subsample to approximately this many reads instead of using all "
+            "of them, for a faster pass over a large BAM. Reads are drawn "
+            "uniformly across the genome and the draw is seeded, so a rerun "
+            "samples the same reads. Rates and distributions stay unbiased; "
+            "the absolute counts reported are counts of the sample. Default: "
+            "use every read."
+        ),
+    )
+    parser.add_argument(
         "--tss_flank",
         type=int,
         default=2000,
@@ -1098,6 +1112,7 @@ def _run_qc(args: argparse.Namespace) -> int:
         threads=args.threads,
         tss_flank=args.tss_flank,
         plot=not args.no_plot,
+        n_reads=args.n_reads,
     )
     return 0
 

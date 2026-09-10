@@ -45,7 +45,33 @@ Regardless of these thresholds, the following reads are always excluded from the
 
 The read-count metrics (`total`, `duplicate`, `secondary`, `supplementary`, `unmapped`) report counts *before* filtering, so you can see what fraction of the library was discarded.
 
-### Output control
+### Subsampling a large BAM
+
+`--n_reads` computes the QC metrics from a random subset instead of every read,
+which is worth doing when a full pass is slow:
+
+```bash
+deamtools qc --bam sample.bam --fasta hg38.fa \
+    --out_dir results --out_name sample --n_reads 5000000
+```
+
+The sampling fraction is `n_reads / (reads in the BAM)`, read straight from the
+BAM index, so nothing is scanned twice. Each read is kept independently with
+that probability, which makes the sample uniform across the genome rather than
+biased toward the first chromosomes. The draw is seeded, so rerunning the same
+command samples the same reads.
+
+Rates and distributions are unbiased under this sampling: the editing rate,
+duplicate rate, trinucleotide context bias, motif PWM and fragment-length
+distribution all mean the same thing as in a full run. **The absolute counts are
+counts of the sample**, not estimates of the whole file; the `sampling` block of
+the JSON records `fraction` and `reads_in_bam` so they can be scaled if needed.
+
+TSS enrichment always uses every read in its windows. It is a ratio computed
+over a small part of the genome, so subsampling it would add noise without
+saving meaningful time.
+
+## Output control
 
 | Argument | Default | Description |
 |---|---|---|

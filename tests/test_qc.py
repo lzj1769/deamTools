@@ -100,9 +100,7 @@ class TestQC:
         # Strand-agnostic: opportunities are reference C or G at internal
         # positions 1..8 -> 1(C),2(G),4(C),5(G),8(C) = 5; one G->A edit at pos 5.
         # ref[1:10] = CGTCGATCG ; change pos5 G->A: CGTCAATCG
-        read = _make_read(
-            "r1", "CGTCAATCG", 1, is_reverse=True, is_paired=False
-        )
+        read = _make_read("r1", "CGTCAATCG", 1, is_reverse=True, is_paired=False)
         bam = _write_bam(str(tmp_path / "x.bam"), [read])
         out_dir = str(tmp_path)
         m = run_qc(bam, fasta_file, out_dir, "qc", min_mapq=0, min_baseq=0, plot=False)
@@ -196,12 +194,22 @@ class TestQC:
 
     def test_fragment_length_from_proper_pair_read1(self, tmp_path, fasta_file):
         r1 = _make_read(
-            "p1", REF_SEQ[0:6], 0, is_read1=True, mate_pos=4,
-            mate_reverse=True, template_length=10,
+            "p1",
+            REF_SEQ[0:6],
+            0,
+            is_read1=True,
+            mate_pos=4,
+            mate_reverse=True,
+            template_length=10,
         )
         r2 = _make_read(
-            "p1", REF_SEQ[4:10], 4, is_read1=False, is_reverse=True,
-            mate_pos=0, template_length=-10,
+            "p1",
+            REF_SEQ[4:10],
+            4,
+            is_read1=False,
+            is_reverse=True,
+            mate_pos=0,
+            template_length=-10,
         )
         bam = _write_bam(str(tmp_path / "x.bam"), [r1, r2])
         out_dir = str(tmp_path)
@@ -276,8 +284,7 @@ class TestQC:
     def test_tss_enrichment_computed(self, tmp_path, fasta_file):
         # Pile reads so insertion 5' ends concentrate at the TSS center (pos 5).
         reads = [
-            _make_read(f"r{i}", REF_SEQ[5:10], 5, is_paired=False)
-            for i in range(20)
+            _make_read(f"r{i}", REF_SEQ[5:10], 5, is_paired=False) for i in range(20)
         ]
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         tss = str(tmp_path / "tss.bed")
@@ -285,8 +292,78 @@ class TestQC:
             f.write("chr1\t4\t6\n")  # midpoint = 5
         out_dir = str(tmp_path)
         m = run_qc(
-            bam, fasta_file, out_dir, "qc", tss_path=tss, min_mapq=0,
-            min_baseq=0, tss_flank=4, plot=False,
+            bam,
+            fasta_file,
+            out_dir,
+            "qc",
+            tss_path=tss,
+            min_mapq=0,
+            min_baseq=0,
+            tss_flank=4,
+            plot=False,
         )
         assert "tss_enrichment" in m
         assert len(m["tss_enrichment"]["profile"]) == 2 * 4 + 1
+
+
+class TestSubsampling:
+    """`n_reads` draws a uniform sample instead of reading everything."""
+
+    def _bam_with(self, tmp_path, n_reads, fasta_file):
+        """A BAM of `n_reads` identical reads, each carrying one C->T edit.
+
+        Identical reads make the editing rate independent of which subset is
+        drawn, so a rate that changes under sampling is a real bug rather than
+        sampling noise.
+        """
+        # REF_SEQ is ACGTCGATCG; flip the C at index 1 to T.
+        edited = REF_SEQ[:1] + "T" + REF_SEQ[2:]
+        reads = [_make_read(f"r{i}", edited, 0) for i in range(n_reads)]
+        return _write_bam(str(tmp_path / "s.bam"), reads)
+
+    def test_none_uses_every_read(self, tmp_path, fasta_file):
+        bam = self._bam_with(tmp_path, 200, fasta_file)
+        m = run_qc(bam, fasta_file, str(tmp_path / "o"), "all", plot=False)
+        assert m["reads"]["total"] == 200
+        assert m["sampling"]["subsampled"] is False
+        assert m["sampling"]["fraction"] == 1.0
+
+    def test_subsamples_to_about_the_requested_count(self, tmp_path, fasta_file):
+        bam = self._bam_with(tmp_path, 400, fasta_file)
+        m = run_qc(bam, fasta_file, str(tmp_path / "o"), "sub", plot=False, n_reads=100)
+        assert m["sampling"]["subsampled"] is True
+        assert m["sampling"]["fraction"] == pytest.approx(0.25)
+        # Binomial(400, 0.25): sd = 8.7, so a wide band is still a real check.
+        assert 50 <= m["reads"]["total"] <= 160
+        assert m["reads"]["total"] < 400
+
+    def test_is_reproducible(self, tmp_path, fasta_file):
+        bam = self._bam_with(tmp_path, 300, fasta_file)
+        a = run_qc(bam, fasta_file, str(tmp_path / "a"), "x", plot=False, n_reads=90)
+        b = run_qc(bam, fasta_file, str(tmp_path / "b"), "x", plot=False, n_reads=90)
+        assert a["reads"]["total"] == b["reads"]["total"]
+        assert a["editing"] == b["editing"]
+
+    def test_larger_request_than_the_bam_uses_all_reads(self, tmp_path, fasta_file):
+        bam = self._bam_with(tmp_path, 50, fasta_file)
+        m = run_qc(
+            bam, fasta_file, str(tmp_path / "o"), "big", plot=False, n_reads=10_000
+        )
+        assert m["reads"]["total"] == 50
+        assert m["sampling"]["subsampled"] is False
+
+    def test_rejects_non_positive(self, tmp_path, fasta_file):
+        bam = self._bam_with(tmp_path, 20, fasta_file)
+        with pytest.raises(ValueError, match="n_reads must be positive"):
+            run_qc(bam, fasta_file, str(tmp_path / "o"), "z", plot=False, n_reads=0)
+
+    def test_editing_rate_is_unbiased_by_sampling(self, tmp_path, fasta_file):
+        """A rate must survive subsampling; only absolute counts shrink."""
+        bam = self._bam_with(tmp_path, 600, fasta_file)
+        full = run_qc(bam, fasta_file, str(tmp_path / "f"), "f", plot=False)
+        sub = run_qc(bam, fasta_file, str(tmp_path / "s"), "s", plot=False, n_reads=300)
+        assert sub["reads"]["total"] < full["reads"]["total"]
+        assert sub["editing"]["global_edit_rate"] == pytest.approx(
+            full["editing"]["global_edit_rate"], abs=1e-9
+        )
+        assert sub["editing"]["global_edit_rate"] > 0  # the rate is real, not 0 == 0

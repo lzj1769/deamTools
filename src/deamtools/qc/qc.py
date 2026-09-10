@@ -39,6 +39,7 @@ import io
 import json
 import logging
 import os
+import random
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -58,6 +59,10 @@ _MOTIF_WINDOW = 11  # bp window for the deaminase motif logo (odd; centre +/- 5)
 
 _COMPLEMENT = str.maketrans("ACGT", "TGCA")
 _BASE_IDX = {"A": 0, "C": 1, "G": 2, "T": 3}
+
+
+# Fixed so that subsampled QC runs are reproducible without another CLI flag.
+_SAMPLE_SEED = 20260910
 
 
 def _revcomp(seq: str) -> str:
@@ -132,9 +137,20 @@ def _process_chrom(
     chrom: str,
     min_mapq: int,
     min_baseq: int,
+    sample_fraction: float = 1.0,
 ) -> _Stats:
-    """Accumulate read, editing, context and fragment-length stats for one chrom."""
+    """Accumulate read, editing, context and fragment-length stats for one chrom.
+
+    When ``sample_fraction`` is below 1, each read is kept with that probability
+    and skipped before any analysis, which is where the cost is. The draw is
+    seeded from the chromosome name, so a rerun samples the same reads.
+    """
     stats = _Stats()
+    # A string seed is hashed deterministically by `random`, unlike the builtin
+    # hash(), which is salted per process and would break reproducibility.
+    rng = random.Random(f"{_SAMPLE_SEED}:{chrom}")
+    subsampling = sample_fraction < 1.0
+
     with (
         pysam.AlignmentFile(bam_path, "rb") as bam,
         pysam.FastaFile(fasta_path) as fasta,
@@ -143,6 +159,8 @@ def _process_chrom(
         ref_len = len(ref_seq)
 
         for read in bam.fetch(chrom):
+            if subsampling and rng.random() >= sample_fraction:
+                continue
             stats.total += 1
             if read.is_unmapped:
                 stats.unmapped += 1
@@ -341,9 +359,7 @@ def _build_metrics(
 
     # Per-read edit rate (edited C/G over editable C/G). Mean is exact; median is
     # taken from the histogram bin centres.
-    rate_mean = (
-        stats.edit_rate_sum / stats.edit_rate_n if stats.edit_rate_n else 0.0
-    )
+    rate_mean = stats.edit_rate_sum / stats.edit_rate_n if stats.edit_rate_n else 0.0
     if stats.edit_rate_n:
         cum = np.cumsum(stats.edit_rate_hist)
         med_bin = int(np.searchsorted(cum, (stats.edit_rate_n + 1) / 2.0))
@@ -418,9 +434,7 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
     has_tss = "tss_enrichment" in metrics
     n_panels = 5 if has_tss else 4
     # One panel per row so each plot is large and readable in the report.
-    fig, axes = plt.subplots(
-        n_panels, 1, figsize=(9, 3.4 * n_panels)
-    )
+    fig, axes = plt.subplots(n_panels, 1, figsize=(9, 3.4 * n_panels))
 
     # Panel 1: trinucleotide context edit fraction.
     ctx_items = sorted(
@@ -471,9 +485,7 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
         axes[4].axhline(1.0, ls="--", lw=0.8, color="grey")
         axes[4].set_xlabel("distance from TSS (bp)")
         axes[4].set_ylabel("normalized insertions")
-        axes[4].set_title(
-            f"TSS enrichment = {metrics['tss_enrichment']['score']:.2f}"
-        )
+        axes[4].set_title(f"TSS enrichment = {metrics['tss_enrichment']['score']:.2f}")
 
     fig.tight_layout()
     buf = io.BytesIO()
@@ -816,6 +828,7 @@ def run_qc(
     threads: int = 1,
     tss_flank: int = 2000,
     plot: bool = True,
+    n_reads: int | None = None,
 ) -> dict:
     """Compute QC metrics for a deaminase chromatin-accessibility BAM.
 
@@ -846,6 +859,22 @@ def run_qc(
         Half-width (bp) of the window around each TSS for enrichment.
     plot : bool, default True
         Whether to render and embed the summary figure in the HTML report.
+    n_reads : int, optional
+        Subsample to approximately this many reads instead of using all of
+        them, for a faster pass over a large BAM. Reads are drawn uniformly
+        across the genome (each kept with probability ``n_reads / total``,
+        which is read from the BAM index, so nothing is scanned twice), and
+        the draw is seeded, so a rerun samples the same reads. Ignored when
+        the BAM already holds fewer reads than this.
+
+        Rates and distributions -- editing rate, duplicate rate, context bias,
+        the motif PWM, fragment lengths -- are unbiased under this sampling.
+        The absolute counts in the report are counts *of the sample*, not
+        estimates of the whole file, and the ``sampling`` block of the metrics
+        records the fraction so they can be scaled if needed. TSS enrichment
+        always uses every read in its windows, since it is a ratio computed
+        over a small part of the genome and subsampling it would only add
+        noise.
 
     Returns
     -------
@@ -858,14 +887,39 @@ def run_qc(
 
     with pysam.AlignmentFile(bam_path, "rb") as bam:
         chrom_sizes = get_chrom_sizes_from_bam(bam)
+        # The index carries per-contig counts, so the total costs no scan.
+        total_reads = sum(st.mapped + st.unmapped for st in bam.get_index_statistics())
     chroms = list(chrom_sizes.keys())
+
+    sample_fraction = 1.0
+    if n_reads is not None:
+        if n_reads <= 0:
+            raise ValueError(f"n_reads must be positive, got {n_reads}")
+        if total_reads and n_reads < total_reads:
+            sample_fraction = n_reads / total_reads
+            logger.info(
+                f"Subsampling to ~{n_reads} of {total_reads} read(s) "
+                f"(fraction {sample_fraction:.4g})"
+            )
+        else:
+            logger.info(
+                f"n_reads={n_reads} >= {total_reads} read(s) in the BAM; "
+                "using all reads"
+            )
+
     logger.info(f"Processing {len(chroms)} chromosome(s) with {threads} thread(s)")
 
     merged = _Stats()
     with ThreadPoolExecutor(max_workers=threads) as pool:
         futures = {
             pool.submit(
-                _process_chrom, bam_path, fasta_path, c, min_mapq, min_baseq
+                _process_chrom,
+                bam_path,
+                fasta_path,
+                c,
+                min_mapq,
+                min_baseq,
+                sample_fraction,
             ): c
             for c in chroms
         }
@@ -886,6 +940,12 @@ def run_qc(
         )
 
     metrics = _build_metrics(merged, tss_score, tss_profile)
+    metrics["sampling"] = {
+        "subsampled": sample_fraction < 1.0,
+        "requested_reads": n_reads,
+        "fraction": sample_fraction,
+        "reads_in_bam": total_reads,
+    }
 
     os.makedirs(out_dir, exist_ok=True)
     json_path = os.path.join(out_dir, f"{out_name}.json")
@@ -901,9 +961,7 @@ def run_qc(
     logger.info(f"Writing {html_path}")
     with open(html_path, "w") as f:
         f.write(
-            _render_html(
-                metrics, img_b64, motif_b64, bam_path, fasta_path, out_name
-            )
+            _render_html(metrics, img_b64, motif_b64, bam_path, fasta_path, out_name)
         )
 
     logger.info("Done")
