@@ -78,7 +78,7 @@ The counting/alignment logic intentionally mirrors the upstream ACCESS-ATAC refe
 
 ## Conventions
 
-- Python ≥ 3.10; every module uses `from __future__ import annotations`. Type hints expected but `disallow_untyped_defs = false`.
+- Python ≥ 3.12; every module uses `from __future__ import annotations`. Type hints expected but `disallow_untyped_defs = false`.
 - A leading underscore marks a package-private symbol (e.g. `_load_regions`, `_get_edit_count`); some are imported across modules within the package, so treat them as package-internal rather than file-private.
 - New public functions follow the existing NumPy-style docstring convention (see `bam2bw.py` / `qc.py`).
 - `version.py` resolves the version via `importlib.metadata`; the canonical version lives in `pyproject.toml`.

@@ -4,7 +4,7 @@
 
 | Requirement | Version | Needed for |
 |---|---|---|
-| Python | ≥ 3.10 | everything |
+| Python | ≥ 3.12 | everything |
 | samtools | any recent | indexing FASTA/BAM; used by `index` and `align` |
 | bwa | any recent | `index` and `align` only |
 

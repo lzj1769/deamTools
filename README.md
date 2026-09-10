@@ -10,7 +10,7 @@ For each aligned read, DeamTools scans reference cytosine positions covered by t
 
 ## Installation
 
-**Requirements:** Python ≥ 3.10, `samtools` (for indexing BAM/FASTA files).
+**Requirements:** Python ≥ 3.12, `samtools` (for indexing BAM/FASTA files).
 
 ```bash
 git clone https://github.com/lzj1769/deamTools.git

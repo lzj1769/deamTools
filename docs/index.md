@@ -1,6 +1,6 @@
 # Introduction
 
-**DeamTools** is an open-source Python 3.10+ command-line toolkit for the analysis of
+**DeamTools** is an open-source Python 3.12+ command-line toolkit for the analysis of
 **deaminase-based chromatin accessibility** data. Double-stranded DNA cytosine
 deaminases (e.g. DddA, DddSs/SsdAtox) preferentially edit cytosines in accessible,
 protein-free chromatin. DeamTools turns the resulting single-base editing events into
