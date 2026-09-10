@@ -27,13 +27,14 @@ a coordinate-sorted, indexed BAM with samtools.
 
 from __future__ import annotations
 
-import io
 import logging
 import os
 import re
 import shutil
 import subprocess
 import threading
+from collections.abc import Iterable
+from typing import IO
 
 import pysam
 
@@ -79,7 +80,7 @@ def _hard_clip_offsets(cigar: str) -> tuple[int, int]:
 
 
 def _write_record(
-    out: io.TextIOBase, name: str, seq: str, qual: str, candidate: str, original: str
+    out: IO[str], name: str, seq: str, qual: str, candidate: str, original: str
 ) -> None:
     """Write one converted FASTQ record.
 
@@ -89,37 +90,56 @@ def _write_record(
     out.write(f"@{name}\tYS:Z:{original}\tYC:Z:{candidate}\n{seq}\n+\n{qual}\n")
 
 
+def _record_fields(record: pysam.FastxRecord) -> tuple[str, str, str]:
+    """``(name, sequence, quality)`` of a FASTQ record, with types narrowed.
+
+    pysam types all three as optional, because a FASTA record carries no
+    quality and a truncated record may carry nothing. Anything fed to the
+    aligner must have a name and a sequence, so a record missing either is
+    reported here rather than surfacing as a ``NoneType`` error deep inside the
+    conversion. A missing quality string is filled with ``I`` (Phred 40), which
+    is what the caller did before.
+    """
+    name, seq = record.name, record.sequence
+    if name is None or seq is None:
+        raise ValueError(
+            f"malformed FASTQ record: name={name!r}, sequence missing"
+            if seq is None
+            else f"malformed FASTQ record {name!r}: no name"
+        )
+    qual = record.quality if record.quality is not None else "I" * len(seq)
+    return name, seq, qual
+
+
 def _feed_converted(
     read1: str,
     read2: str | None,
-    out: io.TextIOBase,
+    out: IO[str],
 ) -> None:
     """Stream both converted candidates of every read/fragment to ``out``."""
     try:
         if read2 is None:
             with pysam.FastxFile(read1) as fq:
                 for r in fq:
-                    seq = r.sequence
-                    qual = r.quality if r.quality is not None else "I" * len(seq)
-                    _write_record(out, r.name, seq.translate(CT_TABLE), qual, "ct", seq)
-                    _write_record(out, r.name, seq.translate(GA_TABLE), qual, "ga", seq)
+                    name, seq, qual = _record_fields(r)
+                    _write_record(out, name, seq.translate(CT_TABLE), qual, "ct", seq)
+                    _write_record(out, name, seq.translate(GA_TABLE), qual, "ga", seq)
         else:
             with pysam.FastxFile(read1) as fq1, pysam.FastxFile(read2) as fq2:
                 for r1, r2 in zip(fq1, fq2, strict=True):
-                    s1, s2 = r1.sequence, r2.sequence
-                    q1 = r1.quality if r1.quality is not None else "I" * len(s1)
-                    q2 = r2.quality if r2.quality is not None else "I" * len(s2)
+                    n1, s1, q1 = _record_fields(r1)
+                    n2, s2, q2 = _record_fields(r2)
                     # Orientation f: read1 C->T, read2 G->A (interleaved pair).
-                    _write_record(out, r1.name, s1.translate(CT_TABLE), q1, "f", s1)
-                    _write_record(out, r2.name, s2.translate(GA_TABLE), q2, "f", s2)
+                    _write_record(out, n1, s1.translate(CT_TABLE), q1, "f", s1)
+                    _write_record(out, n2, s2.translate(GA_TABLE), q2, "f", s2)
                     # Orientation r: read1 G->A, read2 C->T.
-                    _write_record(out, r1.name, s1.translate(GA_TABLE), q1, "r", s1)
-                    _write_record(out, r2.name, s2.translate(CT_TABLE), q2, "r", s2)
+                    _write_record(out, n1, s1.translate(GA_TABLE), q1, "r", s1)
+                    _write_record(out, n2, s2.translate(CT_TABLE), q2, "r", s2)
     finally:
         out.close()
 
 
-def _emit_clean_header(fasta_path: str, out: io.TextIOBase) -> None:
+def _emit_clean_header(fasta_path: str, out: IO[str]) -> None:
     """Write a fresh @HD + @SQ block from the original FASTA's .fai."""
     out.write("@HD\tVN:1.6\tSO:coordinate\n")
     with open(fasta_path + ".fai") as f:
@@ -195,7 +215,7 @@ def _primary_score(lines: list[str]) -> int:
     return total
 
 
-def _flush_group(lines: list[str], out: io.TextIOBase) -> None:
+def _flush_group(lines: list[str], out: IO[str]) -> None:
     """Pick the best candidate among ``lines`` (one read name) and emit it.
 
     Records are partitioned by their ``YC`` candidate tag; the candidate with
@@ -213,8 +233,8 @@ def _flush_group(lines: list[str], out: io.TextIOBase) -> None:
 
 
 def _process_sam(
-    bwa_stdout: io.TextIOBase,
-    sort_stdin: io.TextIOBase,
+    bwa_stdout: Iterable[str],
+    sort_stdin: IO[str],
 ) -> None:
     """Group bwa output by read name and write the best candidate of each.
 
@@ -347,6 +367,8 @@ def run_align(
     try:
         with open(sam_path, "w") as sam:
             _emit_clean_header(fasta_path, sam)
+            if bwa_proc.stdout is None:  # unreachable with stdout=PIPE
+                raise RuntimeError("bwa mem produced no stdout stream")
             _process_sam(bwa_proc.stdout, sam)
     finally:
         feeder.join()

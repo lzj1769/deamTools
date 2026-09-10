@@ -99,7 +99,8 @@ def _to_motif(motif, bg: list[float], pseudocounts: float) -> mm.Motif:
     if isinstance(motif, mm.Motif):
         return motif
     counts = tuple(tuple(motif.counts[base]) for base in _BASES)
-    matrix = mm.tools.log_odds(counts, bg, pseudocounts)
+    # log_odds returns a list of lists; Motif's annotation asks for tuples.
+    matrix = tuple(tuple(row) for row in mm.tools.log_odds(counts, bg, pseudocounts))
     return mm.Motif(_motif_name(motif), matrix)
 
 
@@ -229,7 +230,7 @@ def run_motif_matching(
     bed_path: str,
     out_dir: str,
     out_name: str,
-    motifs: list | None = None,
+    motifs: Sequence | None = None,
     motif_files: Sequence[str] | None = None,
     release: str = "JASPAR2024",
     collection: str = "CORE",
@@ -274,17 +275,22 @@ def run_motif_matching(
     logger.info(f"Regions: {bed_path}")
 
     if motif_files:
-        motifs = load_motifs_from_files(motif_files, pseudocounts=pseudocounts)
-    elif motifs is None:
-        motifs = _get_motifs_from_jaspar(
+        resolved: Iterable = load_motifs_from_files(
+            motif_files, pseudocounts=pseudocounts
+        )
+    elif motifs is not None:
+        resolved = motifs
+    else:
+        fetched = _get_motifs_from_jaspar(
             release=release, collection=collection, tax_group=tax_group
         )
-        if not motifs:
+        if not fetched:
             raise RuntimeError(
                 "No motifs available. Pass --motif_files, or install pyjaspar "
                 "(pip install pyjaspar) to fetch them from JASPAR."
             )
-    motifs = list(motifs)
+        resolved = fetched
+    motifs = list(resolved)
     logger.info(f"Motifs:  {len(motifs)} (p-value {p_value})")
 
     scanner = prepare_scanner(motifs, pseudocounts=pseudocounts, p_value=p_value)

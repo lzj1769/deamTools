@@ -304,11 +304,12 @@ def _tss_enrichment(
                 for read in bam.fetch(chrom, start, end):
                     if not _passes_filters(read, min_mapq):
                         continue
-                    site = (
-                        read.reference_end - 1
-                        if read.is_reverse
-                        else read.reference_start
-                    )
+                    # Narrow before the arithmetic: reference_end is optional
+                    # and `- 1` would run before any check placed after it.
+                    ref_start, ref_end = read.reference_start, read.reference_end
+                    if ref_start is None or ref_end is None:
+                        continue
+                    site = ref_end - 1 if read.is_reverse else ref_start
                     if site is None:
                         continue
                     rel = site - start
@@ -416,7 +417,9 @@ def _build_metrics(
             "n_events": stats.motif_events,
         },
     }
-    if tss_score is not None:
+    # The two are produced together by _tss_enrichment, but their types do not
+    # say so; test both so the profile is narrowed as well as the score.
+    if tss_score is not None and tss_profile is not None:
         metrics["tss_enrichment"] = {
             "score": tss_score,
             "profile": [round(float(v), 4) for v in tss_profile],

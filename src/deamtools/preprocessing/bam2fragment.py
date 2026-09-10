@@ -122,6 +122,8 @@ def _process_chrom(
                 continue
 
             qname = read.query_name
+            if qname is None:  # unnamed record; cannot be paired up
+                continue
             mate = buffer.pop(qname, None)
             if mate is None:
                 buffer[qname] = read
@@ -134,7 +136,9 @@ def _process_chrom(
             r1, r2 = (mate, read) if mate.is_read1 else (read, mate)
             r1_start, r2_start = r1.reference_start, r2.reference_start
             r1_end, r2_end = r1.reference_end, r2.reference_end
-            if None in (r1_start, r2_start, r1_end, r2_end):
+            # Checked one by one rather than with `None in (...)`, which reads
+            # the same but tells a type checker nothing about the four names.
+            if r1_start is None or r2_start is None or r1_end is None or r2_end is None:
                 continue
 
             start = min(r1_start, r2_start)
@@ -145,7 +149,7 @@ def _process_chrom(
             edits.update(_editing_positions(r2, ref_seq, min_baseq))
             positions = tuple(sorted(edits))
 
-            bc: str | None = None
+            bc = None
             if barcode:
                 bc = _get_barcode(r1, barcode_tag) or _get_barcode(r2, barcode_tag)
 
