@@ -10,24 +10,32 @@ The package root is `deamTools/` (note the capital T); the importable package is
 
 ## Commands
 
+The project is managed with **uv**; `uv.lock` is committed and pins the whole dev
+environment. Run everything through `uv run`, which syncs the venv first, so no
+manual activation is needed.
+
 ```bash
-# Install (editable, with dev tooling) — run from deamTools/
-pip install -e ".[dev]"
+# Set up (creates .venv from uv.lock) — run from deamTools/
+uv sync --extra dev
+uv sync --extra dev --extra seq2edit   # add torch for the seq2edit command
 
 # Tests (pure-Python; addopts = -q, pythonpath = src)
-pytest
-pytest tests/test_qc.py                 # single file
-pytest tests/test_qc.py::TestQC::test_edit_rate_and_opportunities  # single test
+uv run pytest
+uv run pytest tests/test_qc.py          # single file
+uv run pytest tests/test_qc.py::TestQC::test_edit_rate_and_opportunities  # single test
 
 # Lint / format / types (config in pyproject.toml; line-length 88)
-ruff check src/ tests/
-black src/ tests/
-mypy src/
+uv run ruff check src/ tests/
+uv run black src/ tests/
+uv run mypy src/
 
 # Docs (Sphinx + MyST + sphinx_rtd_theme)
-pip install -e ".[docs]"
-sphinx-build -b html docs docs/_build/html      # CI uses -W (warnings = errors)
+uv sync --extra docs
+uv run sphinx-build -b html docs docs/_build/html   # CI uses -W (warnings = errors)
 ```
+
+After editing dependencies in `pyproject.toml`, run `uv lock` and commit the
+updated `uv.lock`; CI syncs with `--locked` and fails if the two disagree.
 
 Tests synthesize BAM/FASTA/BigWig fixtures with `pysam`/`pyBigWig` in tmp dirs (see helpers like `_make_read`/`_write_bam` in `tests/test_bam2bw.py`). They do **not** require `bwa`/`samtools` on PATH; `MOODS` is a hard dependency and is exercised directly (`tests/test_matching.py` builds motifs in memory). The `index`/`align` commands need `bwa`+`samtools` at runtime; `match` needs the optional `pyjaspar` for JASPAR fetch.
 

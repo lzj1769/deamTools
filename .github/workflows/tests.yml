@@ -14,21 +14,29 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
 
+    env:
+      # uv reads this for both `sync` and `run`, so the matrix version is used
+      # without repeating --python on every step.
+      UV_PYTHON: ${{ matrix.python-version }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          enable-cache: true
 
       - name: Install system libraries
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q zlib1g-dev libbz2-dev liblzma-dev libcurl4-openssl-dev
 
+      # --locked fails if uv.lock is out of date with pyproject.toml, so a
+      # dependency change that was not re-locked is caught here rather than
+      # silently resolving to something else.
       - name: Install package
-        run: pip install -e ".[dev]"
+        run: uv sync --extra dev --locked
 
       - name: Run tests
-        run: pytest --tb=short
+        run: uv run pytest --tb=short
