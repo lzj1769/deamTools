@@ -90,7 +90,7 @@ run_bam2fragment(
 ) -> None
 ```
 
-Write a per-fragment editing-signal table to `<out_dir>/<out_name>.tsv` (or `.tsv.gz` when `gzip=True`). With `barcode=True`, a barcode column is added (10x ordering). Editing is strand-aware (`C→T` forward, `G→A` reverse).
+Write a per-fragment editing-signal table to `<out_dir>/<out_name>.tsv` (or `.tsv.gz` when `gzip=True`). With `barcode=True`, a barcode column is added (10x ordering). The last two columns are the `C→T` and `G→A` positions, reported separately: `C→T` means the top strand was deaminated at that position and `G→A` the bottom strand. Both are called regardless of read orientation, and a position covered by both mates is reported once.
 
 ## `deamtools.qc`
 

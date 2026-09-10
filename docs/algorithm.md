@@ -10,25 +10,33 @@ The signal is a mismatch: the reference carries C (or G), but the aligned read c
 
 ## Strand convention
 
-**Forward-strand reads** (`is_reverse = False`):
+The two mismatch patterns say **which strand of the molecule was deaminated** — not which way the observing read happened to align.
+
+**Top-strand event.** A C on the plus strand is deaminated:
 
 ```
 Reference (+):  5'—...C...—3'
                        ↓ deamination
-Read:           5'—...T...—3'
+Molecule (+):   5'—...T...—3'
 ```
 
 Pattern: `ref_base == 'C'` and `read_base == 'T'`.
 
-**Reverse-strand reads** (`is_reverse = True`): the deaminase acts on the minus (template) strand, where a reference G corresponds to a template C. After deamination and reverse-complementing into the stored read, the mismatch appears as G→A.
+**Bottom-strand event.** A C on the minus strand is deaminated. That C pairs with a reference G, so in reference coordinates the event shows up at a G:
 
 ```
 Reference (+):  5'—...G...—3'
 Template (−):   3'—...C...—5'  ← deaminated here
-Stored read:    5'—...A...—3'
 ```
 
 Pattern: `ref_base == 'G'` and `read_base == 'A'`.
+
+**Read orientation does not select between them.** Two facts make `is_reverse` the wrong test:
+
+1. A BAM stores `SEQ` in **reference orientation** — a reverse-strand record has already been reverse-complemented — so both patterns are expressed against the plus strand regardless of how the read aligned.
+2. Library prep fixes the deaminated U into a real **T:A** base pair, so after amplification *both* strands of the molecule carry the substitution and any read covering the position reports it.
+
+A double-stranded deaminase edits both strands, so one fragment routinely carries both patterns at different positions. Every command therefore calls both patterns on every read. Measured on `data/ACCESS-ATAC/chr10.bam`, `is_reverse` predicts a read's dominant edit direction only about **65%** of the time; filtering on it discarded **35.5%** of editing events — events carrying the same `TC` enzyme-motif fingerprint as the ones kept, so genuine deamination rather than noise. `bam2fragment` used such a filter until 2026-09-10.
 
 ## Deamination-aware alignment (`index` + `align`)
 
@@ -48,7 +56,7 @@ Two strand conventions are used, depending on the command:
 | Command | Convention | Counted as an edit |
 |---|---|---|
 | `bam2bw`, `qc` | **strand-agnostic** | any reference `C→T` **or** `G→A` mismatch, regardless of read orientation |
-| `bam2fragment` | **strand-aware** | `C→T` on forward reads, `G→A` on reverse reads |
+| `bam2fragment` | **strand-agnostic, strand-resolved** | the same mismatches, reported in two separate columns so the edited strand is preserved |
 
 Reads flagged unmapped, duplicate, QC-fail, secondary, or supplementary are always excluded, then `min_mapq` is applied per read; `min_baseq` gates individual bases.
 
@@ -62,7 +70,7 @@ This is not a rounding detail. On `data/ACCESS-ATAC/chr10.bam` the overlap accou
 
 Records whose mate never arrives — unpaired reads, a mate that was unmapped, filtered out, or placed on another contig — are counted as one-record fragments, so nothing is dropped. Single-end data is unaffected: one record is one fragment.
 
-`bam2fragment` has always worked per fragment (it merges the mates' editing positions into a set), though strand-aware rather than strand-agnostic.
+`bam2fragment` has always worked per fragment, and now shares the same merging helper.
 
 ## Signal generation (`bam2bw`)
 

@@ -35,16 +35,25 @@ Tab-delimited, one row per unique fragment signature:
 
 ```
 # without --barcode
-chrom   start   end   count   pos1|pos2|...
+chrom   start   end   count   c2t_pos1|c2t_pos2|...   g2a_pos1|g2a_pos2|...
 
 # with --barcode (10x ordering)
-chrom   start   end   barcode   count   pos1|pos2|...
+chrom   start   end   barcode   count   c2t_positions   g2a_positions
 ```
 
 - **`count`** — the number of reads/pairs producing that exact `(coords [, barcode], edits)` signature.
-- **edits column** — a `|`-separated list of 0-based reference positions showing a `C→T` (forward read) or `G→A` (reverse read) deamination event. Fragments with no detected edits emit `.`.
+- **`C→T` column** — a `|`-separated list of 0-based reference positions where a reference **C** is read as **T**: the **top** strand was deaminated there.
+- **`G→A` column** — the same for a reference **G** read as **A**: the **bottom** strand was deaminated.
 
-Editing is **strand-aware**: forward reads record `C→T`, reverse reads record `G→A`. For properly-paired reads, the two mates are merged into one fragment (`start` = min of the two read starts, `end` = max of the two read ends) and their editing positions are unioned. In an unpaired BAM each read is treated as a single-end fragment.
+Either column is `.` when the fragment shows no event of that kind.
+
+Both patterns are called on **every** read, whatever its orientation, and kept in separate columns so the edited strand is preserved. Read orientation is not what decides the pattern: a BAM stores `SEQ` in reference orientation, and library prep fixes the deaminated U into a real T:A pair that both strands carry, so a read of either orientation reports either pattern. A double-stranded deaminase edits both strands, so one fragment routinely carries both. See [Algorithm → Strand convention](../algorithm.md#strand-convention).
+
+For properly-paired reads, the two mates are merged into one fragment (`start` = min of the two read starts, `end` = max of the two read ends). A position both mates cover is reported once; if they disagree the higher base quality wins, and an equal-quality disagreement is dropped as ambiguous. In an unpaired BAM each read is treated as a single-end fragment.
+
+```{note}
+Before 2026-09-10 this command recorded `C→T` only on forward reads and `G→A` only on reverse ones. On real ACCESS-ATAC data that discarded about **36%** of editing events, so tables written by an earlier version are not comparable with current output — and they have one editing column rather than two.
+```
 
 Reads flagged unmapped, duplicate, QC-fail, secondary, or supplementary are always excluded.
 

@@ -6,12 +6,16 @@ mate. It is one position on one molecule, so counting it twice inflates coverage
 and, because the overlap is the middle of the fragment rather than a random
 subset of positions, biases any rate computed from it.
 
-Both :mod:`deamtools.qc.qc` and :mod:`deamtools.preprocessing.bam2bw` therefore
-tally per *fragment*: group records with :func:`iter_fragments`, collapse each
-fragment's mates with :func:`merge_fragment_bases`, then count. Keeping that in
-one place is deliberate -- the two modules previously drifted on exactly this
-point. :mod:`deamtools.preprocessing.bam2fragment` predates these helpers and
-merges mates itself, strand-aware, into a set of editing positions.
+Every counting command therefore tallies per *fragment*: group records with
+:func:`iter_fragments`, collapse each fragment's mates with
+:func:`merge_fragment_bases`, then count. Keeping that in one place is
+deliberate -- :mod:`deamtools.qc.qc` and :mod:`deamtools.preprocessing.bam2bw`
+previously drifted on exactly this point.
+
+:mod:`deamtools.preprocessing.bam2fragment` uses :func:`merge_fragment_bases`
+but keeps its own pairing loop: it reports fragment *coordinates*, so it needs
+both mates and drops the pair when either fails ``--min_mapq``, where the other
+two keep a lone mate as a one-record fragment.
 """
 
 from __future__ import annotations
@@ -85,12 +89,20 @@ def merge_fragment_bases(
     are expected to agree. A disagreement there is therefore a sequencing error
     in one of them, and the higher base quality wins.
 
+    When the two disagree at *equal* quality the position is dropped as
+    ambiguous rather than resolved arbitrarily. This is not a corner case:
+    modern instruments bin quality scores into a handful of values (Q2/Q12/
+    Q23/Q37 on a NovaSeq), so equal-quality disagreements are common, and
+    "keep whichever mate was seen first" would systematically mean "keep read
+    1". Dropping costs one position and biases nothing.
+
     Positions failing ``min_baseq`` are dropped, as are positions outside
     ``[start, end)`` when those are given. Only matched (M/=/X) bases contribute,
     so indels are skipped the way ``get_aligned_pairs(matches_only=True)``
     skips them.
     """
     best: dict[int, tuple[str, int]] = {}
+    ambiguous: set[int] = set()
     for read in fragment:
         seq = read.query_sequence
         if seq is None:
@@ -104,7 +116,13 @@ def merge_fragment_bases(
             qual = quals[query_pos] if quals is not None else _NO_QUAL
             if qual < min_baseq:
                 continue
+            base = seq[query_pos]
             previous = best.get(ref_pos)
             if previous is None or qual > previous[1]:
-                best[ref_pos] = (seq[query_pos], qual)
-    return {ref_pos: base for ref_pos, (base, _) in best.items()}
+                best[ref_pos] = (base, qual)
+                ambiguous.discard(ref_pos)
+            elif qual == previous[1] and base != previous[0]:
+                ambiguous.add(ref_pos)
+    return {
+        ref_pos: base for ref_pos, (base, _) in best.items() if ref_pos not in ambiguous
+    }

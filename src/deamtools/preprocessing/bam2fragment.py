@@ -1,22 +1,39 @@
 """Convert a coordinate-sorted BAM to a per-fragment editing-signal table.
 
 Each output row represents a unique fragment defined by ``(chrom, start, end,
-editing_positions[, barcode])``. The ``count`` field reports the number of
-reads/pairs that produced that exact signature, and ``editing_positions`` is
-a ``|``-separated list of reference positions (0-based) where the fragment
-shows a C->T (forward read) or G->A (reverse read) deamination event.
+c_to_t_positions, g_to_a_positions[, barcode])``. The ``count`` field reports
+the number of reads/pairs that produced that exact signature, and the two
+editing columns are ``|``-separated lists of reference positions (0-based).
 
 Output formats:
 
   * Without ``--barcode``::
 
-        chrom  start  end  count  pos1|pos2|...
+        chrom  start  end  count  c2t_positions  g2a_positions
 
   * With ``--barcode`` (10x fragments-style ordering)::
 
-        chrom  start  end  barcode  count  pos1|pos2|...
+        chrom  start  end  barcode  count  c2t_positions  g2a_positions
 
-Fragments with no detected editing positions emit ``.`` in the editing column.
+Either editing column is ``.`` when that fragment shows no event of that kind.
+
+**The two edit directions are reported separately, and both are called
+regardless of read orientation.** A reference ``C`` read as ``T`` means the top
+strand was deaminated at that position; a reference ``G`` read as ``A`` means
+the bottom strand was. Which strand carries the event is a property of the
+molecule, not of the record that happens to observe it: a BAM stores every read
+in reference orientation, and library prep fixes the deaminated U into a real
+T:A pair, so both mismatch patterns are visible on reads of either orientation.
+
+Until 2026-09-10 this module recorded ``C->T`` only on forward reads and
+``G->A`` only on reverse reads, which used ``read.is_reverse`` as a proxy for
+"which strand was edited". On ``data/ACCESS-ATAC/chr10.bam`` that proxy is only
+about 65% accurate and the rule discarded **35.5%** of editing events -- events
+carrying the same ``TC`` enzyme-motif fingerprint as the ones it kept, so
+genuine deamination rather than noise. Keeping the two directions in separate
+columns preserves the strand information the old rule was reaching for; the
+ACCESS-ATAC preprint calls resolving both strands a route to better allelic
+occupancy imputation.
 """
 
 from __future__ import annotations
@@ -25,17 +42,18 @@ import gzip
 import logging
 import os
 from collections import defaultdict
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import IO
 
 import pysam
 
-from deamtools.utils import get_chrom_sizes_from_bam
+from deamtools.utils import get_chrom_sizes_from_bam, merge_fragment_bases
 
 logger = logging.getLogger(__name__)
 
-# Per-chromosome key layout: (start, end, edits, barcode_or_None).
-_FragKey = tuple[int, int, tuple[int, ...], "str | None"]
+# Per-chromosome key layout: (start, end, c_to_t, g_to_a, barcode_or_None).
+_FragKey = tuple[int, int, tuple[int, ...], tuple[int, ...], "str | None"]
 
 
 def _open_output(path: str) -> IO[str]:
@@ -44,26 +62,34 @@ def _open_output(path: str) -> IO[str]:
     return open(path, "w")
 
 
-def _editing_positions(read, ref_seq: str, min_baseq: int) -> list[int]:
-    """Reference positions (0-based) where this read records a deamination event."""
-    seq = read.query_sequence
-    if seq is None:
-        return []
-    quals = read.query_qualities
-    is_reverse = read.is_reverse
-    positions: list[int] = []
-    for query_pos, ref_pos in read.get_aligned_pairs(matches_only=True):
-        if quals is not None and quals[query_pos] < min_baseq:
-            continue
+def _editing_positions(
+    fragment: Sequence[pysam.AlignedSegment],
+    ref_seq: str,
+    min_baseq: int,
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Reference positions where this fragment records a deamination event.
+
+    Returns ``(c_to_t, g_to_a)``: sorted positions where a reference ``C`` reads
+    ``T`` (top-strand event) and where a reference ``G`` reads ``A``
+    (bottom-strand event). Both are called **regardless of read orientation** --
+    see the module docstring for why ``read.is_reverse`` is the wrong test.
+
+    The mates are collapsed by :func:`~deamtools.utils.merge_fragment_bases`
+    first, so a position both of them cover is one observation and the higher
+    base quality settles a disagreement, rather than a low-quality mate being
+    able to inject an event the confident mate contradicts.
+    """
+    bases = merge_fragment_bases(fragment, min_baseq)
+    c_to_t: list[int] = []
+    g_to_a: list[int] = []
+    for ref_pos in sorted(bases):
         ref_base = ref_seq[ref_pos]
-        read_base = seq[query_pos]
-        if is_reverse:
-            if ref_base == "G" and read_base == "A":
-                positions.append(ref_pos)
-        else:
-            if ref_base == "C" and read_base == "T":
-                positions.append(ref_pos)
-    return positions
+        read_base = bases[ref_pos]
+        if ref_base == "C" and read_base == "T":
+            c_to_t.append(ref_pos)
+        elif ref_base == "G" and read_base == "A":
+            g_to_a.append(ref_pos)
+    return tuple(c_to_t), tuple(g_to_a)
 
 
 def _passes_basic_filters(read) -> bool:
@@ -112,9 +138,9 @@ def _process_chrom(
                 end = read.reference_end
                 if start is None or end is None:
                     continue
-                positions = tuple(_editing_positions(read, ref_seq, min_baseq))
+                c_to_t, g_to_a = _editing_positions((read,), ref_seq, min_baseq)
                 bc = _get_barcode(read, barcode_tag) if barcode else None
-                counter[(start, end, positions, bc)] += 1
+                counter[(start, end, c_to_t, g_to_a, bc)] += 1
                 continue
 
             # Paired-end: only proper pairs whose mate is also mapped.
@@ -144,16 +170,13 @@ def _process_chrom(
             start = min(r1_start, r2_start)
             end = max(r1_end, r2_end)
 
-            edits: set[int] = set()
-            edits.update(_editing_positions(r1, ref_seq, min_baseq))
-            edits.update(_editing_positions(r2, ref_seq, min_baseq))
-            positions = tuple(sorted(edits))
+            c_to_t, g_to_a = _editing_positions((r1, r2), ref_seq, min_baseq)
 
             bc = None
             if barcode:
                 bc = _get_barcode(r1, barcode_tag) or _get_barcode(r2, barcode_tag)
 
-            counter[(start, end, positions, bc)] += 1
+            counter[(start, end, c_to_t, g_to_a, bc)] += 1
 
     return chrom, dict(counter)
 
@@ -164,12 +187,13 @@ def _format_row(
     count: int,
     include_barcode: bool,
 ) -> str:
-    start, end, positions, barcode = key
-    pos_str = "|".join(str(p) for p in positions) if positions else "."
+    start, end, c_to_t, g_to_a, barcode = key
+    c2t_str = "|".join(str(p) for p in c_to_t) if c_to_t else "."
+    g2a_str = "|".join(str(p) for p in g_to_a) if g_to_a else "."
     if include_barcode:
         bc_str = barcode if barcode is not None else "."
-        return f"{chrom}\t{start}\t{end}\t{bc_str}\t{count}\t{pos_str}"
-    return f"{chrom}\t{start}\t{end}\t{count}\t{pos_str}"
+        return f"{chrom}\t{start}\t{end}\t{bc_str}\t{count}\t{c2t_str}\t{g2a_str}"
+    return f"{chrom}\t{start}\t{end}\t{count}\t{c2t_str}\t{g2a_str}"
 
 
 def run_bam2fragment(

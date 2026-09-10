@@ -214,8 +214,10 @@ class TestBam2Fragment:
         reads = []
         # pair A: edit at pos 1
         reads += _pair("pA", 0, "ATGTCG", 4, REF_SEQ[4:10])
-        # pair B: edit at pos 4 (R1 reads ATGTTG -> T at pos 4)
-        reads += _pair("pB", 0, "ACGTTG", 4, REF_SEQ[4:10])
+        # pair B: edit at pos 4. It falls in the mate overlap, so R2 has to
+        # report it too -- both strands carry the event after library prep,
+        # and mates contradicting each other is a sequencing error, not data.
+        reads += _pair("pB", 0, "ACGTTG", 4, "TGATCG")
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
         run_bam2fragment(
@@ -231,17 +233,16 @@ class TestBam2Fragment:
         edit_cols = sorted(line.split("\t")[4] for line in lines)
         assert edit_cols == ["1", "4"]
 
-    def test_reverse_read_g_to_a_edit(self, tmp_path, fasta_file):
-        # R2 is a reverse-strand read; G->A at pos 2 should be detected.
-        # R2 sequence is given in reference orientation (reverse-strand reads are
-        # stored as they appear on the + strand in the BAM SEQ column).
-        # ref pos 2..7 = GTCGAT; an A at pos 2 -> ATCGAT.
+    def test_g_to_a_gets_its_own_column(self, tmp_path, fasta_file):
+        # ref pos 0..5 = ACGTCG and 2..7 = GTCGAT; an A at pos 2 is a G->A edit.
+        # Both mates report it, as real mates do -- library prep fixes the
+        # deaminated U into a T:A pair that both strands carry.
         reads = _pair(
             "pair1",
             r1_pos=0,
-            r1_seq=REF_SEQ[0:6],  # no edits
+            r1_seq="ACATCG",  # G->A at pos 2, forward read
             r2_pos=2,
-            r2_seq="ATCGAT",  # G->A at pos 2 on reverse read
+            r2_seq="ATCGAT",  # G->A at pos 2, reverse read
         )
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
@@ -254,7 +255,65 @@ class TestBam2Fragment:
             min_baseq=0,
         )
         cols = _read_lines(out)[0].split("\t")
-        assert cols[4] == "2"
+        assert cols[4] == "."  # no C->T
+        assert cols[5] == "2"  # G->A, listed once despite both mates seeing it
+
+    def test_edit_direction_does_not_follow_read_orientation(
+        self, tmp_path, fasta_file
+    ):
+        """Both patterns are called on reads of either orientation.
+
+        Until 2026-09-10 this module recorded C->T only on forward reads and
+        G->A only on reverse ones, using read.is_reverse as a proxy for which
+        strand was deaminated. Neither edit here would have been reported.
+        """
+        # R1 forward over 0..5 with G->A at pos 2; R2 reverse over 4..9 with
+        # C->T at pos 8. The mates do not overlap, so each stands alone.
+        reads = _pair(
+            "pair1",
+            r1_pos=0,
+            r1_seq="ACATCG",  # ref ACGTCG -> G->A at pos 2, on a FORWARD read
+            r2_pos=6,
+            r2_seq="ATTG",  # ref[6:10] ATCG -> C->T at pos 8, on a REVERSE read
+        )
+        bam = _write_bam(str(tmp_path / "x.bam"), reads)
+        out = str(tmp_path / "frag.tsv")
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
+        cols = _read_lines(out)[0].split("\t")
+        assert cols[4] == "8"  # C->T seen on the reverse mate
+        assert cols[5] == "2"  # G->A seen on the forward mate
+
+    def test_both_directions_on_one_fragment_are_listed_separately(
+        self, tmp_path, fasta_file
+    ):
+        # A dsDNA deaminase edits both strands, so one molecule carries both.
+        reads = _pair(
+            "pair1",
+            r1_pos=0,
+            r1_seq="ATATCG",  # C->T at 1 and G->A at 2
+            r2_pos=4,
+            r2_seq=REF_SEQ[4:10],
+        )
+        bam = _write_bam(str(tmp_path / "x.bam"), reads)
+        out = str(tmp_path / "frag.tsv")
+        run_bam2fragment(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            out_dir=str(tmp_path),
+            out_name="frag",
+            min_mapq=0,
+            min_baseq=0,
+        )
+        cols = _read_lines(out)[0].split("\t")
+        assert cols[4] == "1"
+        assert cols[5] == "2"
 
     def test_dedup_of_overlapping_edit_positions(self, tmp_path, fasta_file):
         # R1 and R2 both cover pos 4 and both report a C->T there.
@@ -263,12 +322,10 @@ class TestBam2Fragment:
             "pair1",
             r1_pos=0,
             r1_seq="ACGTTG",  # T at pos 4 (forward)
-            # R2 reverse, covers ref 4..9 = CGATCG. With C at pos 4 changed to T,
-            # we'd see a forward-style edit. But R2 is reverse, so a C->T pattern
-            # on R2 isn't counted (only G->A on reverse counts). So put a normal
-            # match here and rely on R1 alone for the pos-4 edit.
+            # R2 is reverse and covers ref 4..9 = CGATCG; it reports the same
+            # T at pos 4. The merged fragment must list the position once.
             r2_pos=4,
-            r2_seq=REF_SEQ[4:10],
+            r2_seq="TGATCG",
         )
         bam = _write_bam(str(tmp_path / "x.bam"), reads)
         out = str(tmp_path / "frag.tsv")
@@ -365,11 +422,12 @@ class TestBam2Fragment:
             barcode_tag="CB",
         )
         cols = _read_lines(out)[0].split("\t")
-        # 10x ordering: chrom, start, end, barcode, count, edits
-        assert len(cols) == 6
+        # 10x ordering: chrom, start, end, barcode, count, C->T, G->A
+        assert len(cols) == 7
         assert cols[3] == "AAACGT-1"
         assert cols[4] == "1"
         assert cols[5] == "1"
+        assert cols[6] == "."
 
     def test_barcode_groups_by_barcode(self, tmp_path, fasta_file):
         # Same coords + edits, two different barcodes -> two rows.

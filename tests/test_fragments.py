@@ -116,6 +116,28 @@ class TestMergeFragmentBases:
         assert merge_fragment_bases([loud, quiet], 0)[0] == "T"
         assert merge_fragment_bases([quiet, loud], 0)[0] == "T"
 
+    def test_equal_quality_disagreement_is_dropped_as_ambiguous(self):
+        """Neither mate is more credible, so the position is not called.
+
+        Quality scores are binned on modern instruments (Q2/Q12/Q23/Q37), so
+        equal-quality disagreements are common; resolving them by input order
+        would just mean "read 1 always wins".
+        """
+        a = _read("a", "TTTT", pos=0, baseq=37)
+        b = _read("a", "AAAA", pos=0, read1=False, baseq=37)
+        assert merge_fragment_bases([a, b], 0) == {}
+        assert merge_fragment_bases([b, a], 0) == {}
+
+    def test_equal_quality_agreement_is_kept(self):
+        a = _read("a", "ACGT", pos=0, baseq=37)
+        b = _read("a", "ACGT", pos=0, read1=False, baseq=37)
+        assert merge_fragment_bases([a, b], 0) == {0: "A", 1: "C", 2: "G", 3: "T"}
+
+    def test_only_the_disagreeing_position_is_dropped(self):
+        a = _read("a", "ACGT", pos=0, baseq=37)
+        b = _read("a", "ATGT", pos=0, read1=False, baseq=37)
+        assert merge_fragment_bases([a, b], 0) == {0: "A", 2: "G", 3: "T"}
+
     def test_min_baseq_drops_positions(self):
         frag = [_read("a", "ACGT", pos=0, baseq=5)]
         assert merge_fragment_bases(frag, 20) == {}
