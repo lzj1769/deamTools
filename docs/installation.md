@@ -71,7 +71,7 @@ The `match` command additionally needs the optional `pyjaspar` package to fetch 
 
 ```bash
 deamtools --version
-# deamtools 0.1.0
+# deamtools 0.1.1
 
 deamtools --help
 ```
