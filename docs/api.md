@@ -108,10 +108,15 @@ run_qc(
     threads: int = 1,
     tss_flank: int = 2000,
     plot: bool = True,
+    n_reads: int | None = None,
 ) -> dict
 ```
 
-Compute QC metrics and write `<out_dir>/<out_name>.json` plus a self-contained HTML report. The report includes the **deaminase sequence-motif logo**, built directly from the editing events in the BAM. Returns the metrics dictionary. Supplying `tss_path` adds TSS enrichment.
+Compute QC metrics and write `<out_dir>/<out_name>.json` plus a self-contained HTML report. The report includes the **deaminase sequence-motif logo**, built directly from the editing events in the BAM. Returns the metrics dictionary.
+
+`n_reads` subsamples the BAM to roughly that many reads (drawn uniformly across the genome from a fixed seed) instead of reading all of them; rates stay unbiased, but the reported counts are counts of the sample.
+
+Supplying `tss_path` adds TSS enrichment, computed the way the [ENCODE ATAC-seq pipeline](https://github.com/ENCODE-DCC/atac-seq-pipeline) defines it: insertion 5' ends binned at 10 bp over a ±`tss_flank` window, minus-strand TSS flipped, normalised to the outermost 100 bp on each side, and scored as the peak of that profile. The report gains a TSS plot with the score marked on it, and the per-bin numbers behind it are written to `<out_dir>/<out_name>.tss_enrichment.csv`.
 
 ## `deamtools.motif.match`
 

@@ -1,12 +1,13 @@
 """Tests for deamtools.qc."""
 
+import csv
 import json
 import os
 
 import pysam
 import pytest
 
-from deamtools.qc import run_qc
+from deamtools.qc import qc, run_qc
 
 # Reference: A C G T C G A T C G   (positions 0..9)
 # Forward C positions: 1, 4, 8   Reverse G positions: 2, 5, 9
@@ -281,29 +282,193 @@ class TestQC:
         # Tables and descriptions are still present without the figure.
         assert "Trinucleotide context bias" in html
 
-    def test_tss_enrichment_computed(self, tmp_path, fasta_file):
-        # Pile reads so insertion 5' ends concentrate at the TSS center (pos 5).
-        reads = [
-            _make_read(f"r{i}", REF_SEQ[5:10], 5, is_paired=False) for i in range(20)
+
+class TestTssEnrichment:
+    """TSS enrichment as the ENCODE ATAC-seq pipeline defines it.
+
+    The profile is built from insertion 5' ends binned at 10 bp, minus-strand
+    windows are flipped, the flanks are normalised to 1, and the score is the
+    *peak* of that profile -- not an average over the centre.
+    """
+
+    CHROM = "chr1"
+    CHROM_LEN = 20_000
+    TSS = 10_000
+    FLANK = 500  # 100 bins of 10 bp; the outer 10 bins are the background
+    READ_LEN = 50
+
+    def _write_bam(self, tmp_path, sites, name="tss.bam"):
+        """BAM whose reads have their insertion 5' end at each given position.
+
+        ``sites`` holds ``(position, is_reverse)`` pairs; a reverse read is
+        placed so that ``reference_end - 1`` lands on the position.
+        """
+        header = {
+            "HD": {"VN": "1.6"},
+            "SQ": [{"LN": self.CHROM_LEN, "SN": self.CHROM}],
+        }
+        path = str(tmp_path / name)
+        tmp = path + ".unsorted.bam"
+        with pysam.AlignmentFile(tmp, "wb", header=header) as bam:
+            for i, (pos, is_reverse) in enumerate(sites):
+                start = pos - (self.READ_LEN - 1) if is_reverse else pos
+                read = _make_read(
+                    f"r{i}",
+                    "A" * self.READ_LEN,
+                    start,
+                    is_reverse=is_reverse,
+                    is_paired=False,
+                )
+                bam.write(read)
+        pysam.sort("-o", path, tmp)
+        os.remove(tmp)
+        pysam.index(path)
+        return path
+
+    def _bed(self, tmp_path, strand=None, name="tss.bed"):
+        path = str(tmp_path / name)
+        cols = [self.CHROM, str(self.TSS), str(self.TSS + 1)]
+        if strand is not None:
+            cols += ["tss1", "0", strand]
+        with open(path, "w") as f:
+            f.write("\t".join(cols) + "\n")
+        return path
+
+    def _flat(self, per_position=1):
+        """One insertion at every position of the window: a featureless profile."""
+        return [
+            (p, False)
+            for p in range(self.TSS - self.FLANK, self.TSS + self.FLANK)
+            for _ in range(per_position)
         ]
-        bam = _write_bam(str(tmp_path / "x.bam"), reads)
-        tss = str(tmp_path / "tss.bed")
-        with open(tss, "w") as f:
-            f.write("chr1\t4\t6\n")  # midpoint = 5
-        out_dir = str(tmp_path)
+
+    def _run(self, tmp_path, sites, strand=None):
+        bam = self._write_bam(tmp_path, sites)
+        bed = self._bed(tmp_path, strand=strand)
+        return qc._tss_enrichment(bam, bed, {self.CHROM: self.CHROM_LEN}, 0, self.FLANK)
+
+    def test_flat_signal_scores_one(self, tmp_path):
+        res = self._run(tmp_path, self._flat())
+        assert res is not None
+        assert res.bin_size == 10
+        assert len(res.profile) == 2 * self.FLANK // 10
+        assert res.n_tss == 1
+        # Every bin equals the background, so the peak is the background.
+        assert res.score == pytest.approx(1.0)
+        assert res.profile.min() == pytest.approx(1.0)
+
+    def test_score_is_the_peak_height(self, tmp_path):
+        # Flat background of 1 insertion/bp (10 per bin) plus 90 extra at the
+        # TSS, so the centre bin holds 100 against a background of 10.
+        sites = self._flat() + [(self.TSS, False)] * 90
+        res = self._run(tmp_path, sites)
+        assert res is not None
+        assert res.background == pytest.approx(10.0)
+        assert res.score == pytest.approx(10.0)
+        assert res.positions[int(res.profile.argmax())] == pytest.approx(5.0)
+
+    def test_peak_is_found_away_from_the_centre(self, tmp_path):
+        # ENCODE takes the maximum of the whole profile. An off-centre peak
+        # therefore sets the score; averaging over the centre would miss it.
+        sites = self._flat() + [(self.TSS + 200, False)] * 90
+        res = self._run(tmp_path, sites)
+        assert res is not None
+        assert res.score == pytest.approx(10.0)
+        assert res.positions[int(res.profile.argmax())] == pytest.approx(205.0)
+
+    def test_reverse_reads_count_their_own_5_prime_end(self, tmp_path):
+        # A reverse read's insertion site is reference_end - 1, so these land in
+        # the same bin as forward reads starting there.
+        sites = self._flat() + [(self.TSS + 200, True)] * 90
+        res = self._run(tmp_path, sites)
+        assert res is not None
+        assert res.positions[int(res.profile.argmax())] == pytest.approx(205.0)
+
+    def test_minus_strand_tss_is_flipped(self, tmp_path):
+        # Signal 200 bp to the left of the TSS is *downstream* for a minus-strand
+        # gene, so flipping must move the peak to positive coordinates.
+        sites = self._flat() + [(self.TSS - 200, False)] * 90
+        plus = self._run(tmp_path, sites, strand="+")
+        minus = self._run(tmp_path, sites, strand="-")
+        assert plus is not None and minus is not None
+        assert plus.positions[int(plus.profile.argmax())] < 0
+        assert minus.positions[int(minus.profile.argmax())] > 0
+        assert minus.score == pytest.approx(plus.score)
+
+    def test_no_usable_tss_returns_none(self, tmp_path):
+        bam = self._write_bam(tmp_path, self._flat())
+        bed = str(tmp_path / "off.bed")
+        with open(bed, "w") as f:
+            f.write(f"{self.CHROM}\t10\t11\n")  # window runs off the contig start
+        assert (
+            qc._tss_enrichment(bam, bed, {self.CHROM: self.CHROM_LEN}, 0, self.FLANK)
+            is None
+        )
+
+    def test_zero_background_gives_nan_score(self, tmp_path):
+        # Insertions only at the TSS: nothing in the flanks to normalise against.
+        res = self._run(tmp_path, [(self.TSS, False)] * 20)
+        assert res is not None
+        assert res.score != res.score  # NaN
+        assert res.counts.sum() == 20  # the raw profile is still reported
+
+    def test_flank_smaller_than_one_bin_falls_back_to_1bp(self, tmp_path):
+        res = self._run_with_flank(tmp_path, 4)
+        assert res is not None
+        assert res.bin_size == 1
+        assert len(res.profile) == 8
+
+    def _run_with_flank(self, tmp_path, flank):
+        bam = self._write_bam(tmp_path, self._flat())
+        bed = self._bed(tmp_path)
+        return qc._tss_enrichment(bam, bed, {self.CHROM: self.CHROM_LEN}, 0, flank)
+
+    def test_run_qc_writes_csv_and_plots_the_score(self, tmp_path):
+        fasta = str(tmp_path / "big.fa")
+        with open(fasta, "w") as f:
+            f.write(f">{self.CHROM}\n")
+            for _ in range(0, self.CHROM_LEN, 60):
+                f.write("ACGTCG" * 10 + "\n")
+        pysam.faidx(fasta)
+
+        sites = self._flat() + [(self.TSS, False)] * 90
+        bam = self._write_bam(tmp_path, sites)
+        bed = self._bed(tmp_path)
+        out_dir = str(tmp_path / "out")
         m = run_qc(
             bam,
-            fasta_file,
+            fasta,
             out_dir,
-            "qc",
-            tss_path=tss,
+            "sample",
+            tss_path=bed,
             min_mapq=0,
             min_baseq=0,
-            tss_flank=4,
-            plot=False,
+            tss_flank=self.FLANK,
         )
-        assert "tss_enrichment" in m
-        assert len(m["tss_enrichment"]["profile"]) == 2 * 4 + 1
+
+        tss = m["tss_enrichment"]
+        assert tss["score"] == pytest.approx(10.0)
+        assert tss["n_tss"] == 1
+        assert tss["flank"] == self.FLANK
+        assert tss["bin_size"] == 10
+        assert tss["profile_csv"] == "sample.tss_enrichment.csv"
+        # The vector lives only in the CSV, so the JSON stays small.
+        assert "profile" not in tss
+
+        csv_path = os.path.join(out_dir, tss["profile_csv"])
+        with open(csv_path) as f:
+            rows = list(csv.DictReader(f))
+        assert len(rows) == 2 * self.FLANK // 10
+        centre = next(r for r in rows if float(r["position"]) == 5.0)
+        assert float(centre["normalized"]) == pytest.approx(10.0, rel=1e-4)
+        assert max(float(r["normalized"]) for r in rows) == pytest.approx(tss["score"])
+        assert sum(int(r["insertions"]) for r in rows) == tss["total_insertions"]
+
+        html = open(os.path.join(out_dir, "sample.html")).read()
+        assert "TSS enrichment" in html
+        assert "sample.tss_enrichment.csv" in html
+        # Its own plot, on top of the multi-panel summary figure.
+        assert html.count("data:image/png;base64,") >= 3
 
 
 class TestSubsampling:

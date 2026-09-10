@@ -22,27 +22,31 @@ metrics most useful for judging a deaminase footprinting experiment:
   edited cytosines, built directly from the editing events (centre excluded,
   ``G->A`` events reverse-complemented to the ``C->T`` orientation). Shows the
   enzyme's flanking-sequence preference.
-* **TSS enrichment** *(optional)* — the classic ATAC-style enrichment of Tn5
-  insertion sites around transcription start sites, computed when a TSS BED is
-  supplied.
+* **TSS enrichment** *(optional)* — enrichment of insertion sites around
+  transcription start sites, computed when a TSS BED is supplied, following the
+  ENCODE ATAC-seq pipeline definition (see :func:`_tss_enrichment`). The
+  aggregate profile behind the plot is also written as CSV.
 
 Results are written as machine-readable JSON plus a self-contained,
-MultiQC-style HTML report (``<out_dir>/<out_name>.json`` and ``.html``). The
-HTML embeds the multi-panel summary figure and documents the meaning of every
-metric inline.
+MultiQC-style HTML report (``<out_dir>/<out_name>.json`` and ``.html``, plus
+``<out_name>.tss_enrichment.csv`` when a TSS BED is given). The HTML embeds the
+multi-panel summary figure and documents the meaning of every metric inline.
 """
 
 from __future__ import annotations
 
 import base64
+import csv
 import io
 import json
 import logging
 import os
 import random
 from collections import defaultdict
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from typing import NamedTuple
 
 import numpy as np
 import pysam
@@ -59,6 +63,12 @@ _MAX_FRAGLEN = 1000  # fragment-length histogram: bins 0.._MAX_FRAGLEN (overflow
 # are needed to resolve the peak -- 0.02 bins leave it about five bars wide.
 _RATE_BINS = 200
 _MOTIF_WINDOW = 11  # bp window for the deaminase motif logo (odd; centre +/- 5)
+
+# TSS-enrichment geometry, from the ENCODE ATAC-seq pipeline
+# (encode_task_tss_enrich.py): a +/-2 kb window split into 400 bins, i.e. 10 bp
+# each, with the outermost 100 bp on either side used as the background.
+_TSS_BIN = 10
+_TSS_EDGE = 100
 
 _COMPLEMENT = str.maketrans("ACGT", "TGCA")
 _BASE_IDX = {"A": 0, "C": 1, "G": 2, "T": 3}
@@ -268,72 +278,162 @@ def _process_chrom(
     return stats
 
 
+class _TssResult(NamedTuple):
+    """Aggregate TSS profile and its enrichment score.
+
+    ``positions`` are bin centres in bp relative to the TSS, ``counts`` the raw
+    insertion counts summed over all TSS, and ``profile`` the ENCODE-normalised
+    signal (mean insertions per TSS divided by ``background``).
+    """
+
+    score: float
+    positions: np.ndarray
+    counts: np.ndarray
+    profile: np.ndarray
+    background: float
+    n_tss: int
+    bin_size: int
+
+
+def _tss_sites(
+    tss_path: str,
+    chrom_sizes: dict[str, int],
+    span: int,
+) -> Iterator[tuple[str, int, bool]]:
+    """Yield ``(chrom, centre, is_minus)`` for TSS whose window fits the contig.
+
+    The TSS is the midpoint of the BED record, so both a 1-bp site and a wider
+    interval work. Strand is column 6 (BED6); records without it are treated as
+    ``+``, except for the common four-column ``chrom start end strand`` TSS
+    files, where column 4 is read as the strand instead.
+    """
+    with open(tss_path) as f:
+        for line in f:
+            if not line.strip() or line.startswith(("#", "track", "browser")):
+                continue
+            parts = line.rstrip("\n").split("\t")
+            chrom = parts[0]
+            if chrom not in chrom_sizes:
+                continue
+            center = (int(parts[1]) + int(parts[2])) // 2
+            if center - span < 0 or center + span > chrom_sizes[chrom]:
+                continue
+            strand_col = 3 if len(parts) == 4 else 5
+            is_minus = len(parts) > strand_col and parts[strand_col].strip() == "-"
+            yield chrom, center, is_minus
+
+
 def _tss_enrichment(
     bam_path: str,
     tss_path: str,
     chrom_sizes: dict[str, int],
     min_mapq: int,
     flank: int,
-) -> tuple[float, np.ndarray]:
-    """ATAC-style TSS enrichment from Tn5 insertion sites.
+) -> _TssResult | None:
+    """TSS enrichment, following the ENCODE ATAC-seq pipeline definition.
 
-    The insertion site of a read is its 5' end (``reference_start`` for forward
-    reads, ``reference_end - 1`` for reverse reads). Insertions are aggregated
-    into a ``2 * flank + 1`` profile centred on every TSS, normalised by the
-    mean insertion density in the outer flanks, and the enrichment score is the
-    mean of the normalised profile in the central ``+/-50`` bp window.
+    Mirrors ``encode_task_tss_enrich.py`` of the ENCODE ATAC-seq pipeline:
 
-    Returns the enrichment score and the normalised profile.
+    1. Take a ``+/-flank`` window around each TSS (ENCODE: 2 kb) and bin it at
+       ``_TSS_BIN`` bp (ENCODE: 400 bins over 4 kb, i.e. 10 bp).
+    2. Count insertion sites -- a read's 5' end, ``reference_start`` forward and
+       ``reference_end - 1`` reverse -- into those bins, flipping the window for
+       minus-strand TSS so upstream is always on the left.
+    3. Average over TSS, then apply the Greenleaf normalisation: divide by the
+       mean of the two edge means, each taken over the outermost ``_TSS_EDGE``
+       bp (ENCODE: 100 bp), so the flanks sit at 1.
+    4. The score is the **peak** of that normalised profile.
+
+    The one deviation from ENCODE is deliberate. ENCODE reaches the insertion
+    site indirectly, asking metaseq for read *coverage* shifted by
+    ``-read_len/2`` so that each read's interval is centred on its cut site;
+    that spreads every insertion over a read-length-wide box, which smooths the
+    profile and depresses the peak. Counting the cut site itself at 1 bp is what
+    that shift is trying to approximate, so scores here run slightly above
+    ENCODE's for the same library, by more the longer the reads.
+
+    Returns ``None`` when no TSS window fits the reference.
     """
-    width = 2 * flank + 1
-    profile = np.zeros(width, dtype=np.float64)
+    # A window narrower than one bin would leave nothing to bin; fall back to
+    # per-bp resolution so small references (and tests) still produce a profile.
+    bin_size = _TSS_BIN if flank >= _TSS_BIN else 1
+    half_bins = flank // bin_size
+    if half_bins == 0:
+        logger.warning(f"  tss_flank={flank} is too small for a profile; skipping")
+        return None
+    n_bins = 2 * half_bins
+    span = half_bins * bin_size  # effective flank after rounding to whole bins
+
+    counts = np.zeros(n_bins, dtype=np.float64)
     n_tss = 0
 
     with pysam.AlignmentFile(bam_path, "rb") as bam:
-        with open(tss_path) as f:
-            for line in f:
-                if not line.strip() or line.startswith(("#", "track", "browser")):
+        for chrom, center, is_minus in _tss_sites(tss_path, chrom_sizes, span):
+            start = center - span
+            per_tss = np.zeros(n_bins, dtype=np.float64)
+            # fetch returns every read overlapping the window, which includes
+            # every read whose 5' end falls inside it.
+            for read in bam.fetch(chrom, start, center + span):
+                if not _passes_filters(read, min_mapq):
                     continue
-                parts = line.split("\t")
-                chrom = parts[0]
-                if chrom not in chrom_sizes:
+                # Narrow before the arithmetic: reference_end is optional and
+                # `- 1` would run before any check placed after it.
+                ref_start, ref_end = read.reference_start, read.reference_end
+                if ref_start is None or ref_end is None:
                     continue
-                center = (int(parts[1]) + int(parts[2])) // 2
-                start = center - flank
-                end = center + flank + 1
-                if start < 0 or end > chrom_sizes[chrom]:
-                    continue
-                n_tss += 1
-                for read in bam.fetch(chrom, start, end):
-                    if not _passes_filters(read, min_mapq):
-                        continue
-                    # Narrow before the arithmetic: reference_end is optional
-                    # and `- 1` would run before any check placed after it.
-                    ref_start, ref_end = read.reference_start, read.reference_end
-                    if ref_start is None or ref_end is None:
-                        continue
-                    site = ref_end - 1 if read.is_reverse else ref_start
-                    if site is None:
-                        continue
-                    rel = site - start
-                    if 0 <= rel < width:
-                        profile[rel] += 1
+                site = ref_end - 1 if read.is_reverse else ref_start
+                rel = site - start
+                if 0 <= rel < 2 * span:
+                    per_tss[rel // bin_size] += 1
+            if is_minus:
+                per_tss = per_tss[::-1]
+            counts += per_tss
+            n_tss += 1
+
+    positions = (np.arange(n_bins) - half_bins) * bin_size + bin_size / 2.0
 
     if n_tss == 0:
         logger.warning("  no usable TSS found; skipping TSS enrichment")
-        return float("nan"), profile
+        return None
 
-    # Background = mean insertion density in the outermost 100 bp on each side.
-    edge = min(100, flank)
-    background = np.concatenate([profile[:edge], profile[-edge:]]).mean()
+    mean_per_tss = counts / n_tss
+    edge_bins = max(1, min(_TSS_EDGE // bin_size, half_bins))
+    # ENCODE averages the two edge means rather than pooling their bins. With
+    # equal-width edges the two agree; keep the reference form regardless.
+    background = float(
+        (mean_per_tss[:edge_bins].mean() + mean_per_tss[-edge_bins:].mean()) / 2.0
+    )
     if background <= 0:
-        logger.warning("  zero TSS flank background; enrichment undefined")
-        return float("nan"), profile
-    normalized = profile / background
-    half = min(50, flank)
-    score = float(normalized[flank - half : flank + half + 1].mean())
-    logger.info(f"  TSS enrichment = {score:.2f} (over {n_tss} TSS)")
-    return score, normalized
+        logger.warning(
+            "  no insertions in the TSS flank background; enrichment undefined"
+        )
+        return _TssResult(
+            float("nan"), positions, counts, mean_per_tss, 0.0, n_tss, bin_size
+        )
+
+    profile = mean_per_tss / background
+    score = float(profile.max())
+    logger.info(
+        f"  TSS enrichment = {score:.2f} (peak of the normalised profile over "
+        f"{n_tss} TSS, {bin_size}-bp bins, +/-{span} bp)"
+    )
+    return _TssResult(score, positions, counts, profile, background, n_tss, bin_size)
+
+
+def _write_tss_csv(path: str, tss: _TssResult) -> None:
+    """Write the aggregate TSS profile -- the numbers behind the plot -- as CSV."""
+    mean_per_tss = tss.counts / tss.n_tss
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            ["position", "insertions", "mean_insertions_per_tss", "normalized"]
+        )
+        for pos, count, mean, norm in zip(
+            tss.positions, tss.counts, mean_per_tss, tss.profile, strict=True
+        ):
+            writer.writerow(
+                [f"{pos:g}", int(count), f"{mean:.6g}", f"{float(norm):.6g}"]
+            )
 
 
 def _histogram_summary(hist: np.ndarray) -> dict[str, float]:
@@ -350,8 +450,8 @@ def _histogram_summary(hist: np.ndarray) -> dict[str, float]:
 
 def _build_metrics(
     stats: _Stats,
-    tss_score: float | None,
-    tss_profile: np.ndarray | None,
+    tss: _TssResult | None,
+    tss_csv_name: str | None,
 ) -> dict:
     edit_rate = (
         stats.total_edits / stats.total_opportunities
@@ -420,12 +520,17 @@ def _build_metrics(
             "n_events": stats.motif_events,
         },
     }
-    # The two are produced together by _tss_enrichment, but their types do not
-    # say so; test both so the profile is narrowed as well as the score.
-    if tss_score is not None and tss_profile is not None:
+    if tss is not None:
+        # The profile itself is not duplicated here: it is a few hundred numbers
+        # and its one home is the CSV, named below so the JSON still points at it.
         metrics["tss_enrichment"] = {
-            "score": tss_score,
-            "profile": [round(float(v), 4) for v in tss_profile],
+            "score": tss.score,
+            "n_tss": tss.n_tss,
+            "flank": int(len(tss.counts) // 2 * tss.bin_size),
+            "bin_size": tss.bin_size,
+            "background": tss.background,
+            "total_insertions": int(tss.counts.sum()),
+            "profile_csv": tss_csv_name,
         }
     return metrics
 
@@ -438,8 +543,7 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
     import matplotlib.pyplot as plt
     from matplotlib.ticker import NullLocator, ScalarFormatter
 
-    has_tss = "tss_enrichment" in metrics
-    n_panels = 5 if has_tss else 4
+    n_panels = 4
     # One panel per row so each plot is large and readable in the report.
     fig, axes = plt.subplots(n_panels, 1, figsize=(9, 3.4 * n_panels))
 
@@ -490,17 +594,63 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
     axes[3].set_ylabel("pairs")
     axes[3].set_title("Fragment length")
 
-    # Panel 5: TSS enrichment.
-    if has_tss:
-        prof = metrics["tss_enrichment"]["profile"]
-        flank = (len(prof) - 1) // 2
-        x = np.arange(-flank, flank + 1)
-        axes[4].plot(x, prof, color="#756bb1")
-        axes[4].axhline(1.0, ls="--", lw=0.8, color="grey")
-        axes[4].set_xlabel("distance from TSS (bp)")
-        axes[4].set_ylabel("normalized insertions")
-        axes[4].set_title(f"TSS enrichment = {metrics['tss_enrichment']['score']:.2f}")
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150)
+    plt.close(fig)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
 
+
+def _tss_figure_base64(tss: _TssResult) -> str:
+    """Render the aggregate TSS profile with the score marked on it; base64 PNG."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(9, 3.8))
+    ax.plot(tss.positions, tss.profile, color="#756bb1", lw=1.4)
+    # Labelled through the legend rather than inline: the flanks sit on this
+    # line by construction, so any text next to it lands on the curve.
+    ax.axhline(1.0, ls="--", lw=0.8, color="#999", label="flank background")
+    ax.legend(loc="upper left", fontsize=9, frameon=False)
+
+    # NaN compares false against itself; that is the "background was zero" case,
+    # where there is a profile to look at but no score to mark on it.
+    if tss.score == tss.score:
+        peak = int(np.argmax(tss.profile))
+        ax.axhline(tss.score, ls=":", lw=0.9, color="#d95f02")
+        ax.plot(tss.positions[peak], tss.score, "o", color="#d95f02", ms=5)
+        label = f"TSS enrichment = {tss.score:.2f}"
+    else:
+        label = "TSS enrichment = n/a (no flank background)"
+    ax.text(
+        0.98,
+        0.94,
+        label,
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=12,
+        fontweight="bold",
+        color="#d95f02",
+        bbox={
+            "facecolor": "white",
+            "edgecolor": "#e2e5ea",
+            "boxstyle": "round,pad=0.4",
+        },
+    )
+
+    ax.set_xlabel("distance from TSS (bp)")
+    ax.set_ylabel("normalized insertions")
+    ax.set_title(
+        f"TSS enrichment ({tss.n_tss:,} TSS, {tss.bin_size}-bp bins, ENCODE style)"
+    )
+    ax.margins(x=0)
+    # Headroom so the score box clears the peak it annotates.
+    top = float(np.nanmax(tss.profile))
+    if top > 0:
+        ax.set_ylim(top=top * 1.18)
     fig.tight_layout()
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150)
@@ -624,11 +774,24 @@ _METRIC_DOCS: dict[str, dict[str, str]] = {
     },
     "tss_enrichment": {
         "score": (
-            "ATAC-style enrichment of Tn5 insertion 5' ends in the central "
-            "&plusmn;50 bp around TSS, normalised to the flank background. Higher "
-            "is better; &gt;6&ndash;10 indicates good accessible-chromatin "
-            "enrichment."
+            "Peak of the flank-normalised insertion profile around TSS, as "
+            "defined by the ENCODE ATAC-seq pipeline. Higher is better; ENCODE "
+            "calls &ge;5 acceptable and &ge;7 ideal for human ATAC, and the "
+            "ACCESS-ATAC preprint reports ~13&ndash;14 for a good library."
         ),
+        "n_tss": (
+            "Number of TSS that contributed, i.e. those whose full window fits "
+            "inside the contig and whose contig is present in the BAM header."
+        ),
+        "flank": "Half-width in bp of the window around each TSS (ENCODE: 2000).",
+        "bin_size": "Width in bp of one profile bin (ENCODE: 10).",
+        "background": (
+            "Mean insertions per TSS per bin in the outermost 100 bp on each "
+            "side; the profile is divided by this, so the flanks sit at 1 "
+            "(the Greenleaf normalisation ENCODE applies)."
+        ),
+        "total_insertions": "Insertion sites counted across all TSS windows.",
+        "profile_csv": "File holding the per-bin numbers plotted above.",
     },
 }
 
@@ -669,6 +832,7 @@ def _render_html(
     metrics: dict,
     img_b64: str | None,
     motif_b64: str | None,
+    tss_b64: str | None,
     bam_path: str,
     fasta_path: str,
     out_name: str,
@@ -713,6 +877,29 @@ def _render_html(
         else ""
     )
 
+    tss_html = ""
+    if tss_b64 and "tss_enrichment" in metrics:
+        tss = metrics["tss_enrichment"]
+        csv_note = (
+            f" The plotted numbers are written to <code>{tss['profile_csv']}</code>."
+            if tss.get("profile_csv")
+            else ""
+        )
+        tss_html = (
+            "<section><h2>TSS enrichment</h2>"
+            "<p class='intro'>Insertion 5' ends aggregated over "
+            f"{_fmt(tss['n_tss'])} transcription start sites, following the "
+            "ENCODE ATAC-seq pipeline: a &plusmn;"
+            f"{_fmt(tss['flank'])}&nbsp;bp window binned at "
+            f"{_fmt(tss['bin_size'])}&nbsp;bp, minus-strand TSS flipped so "
+            "upstream is always on the left, then divided by the mean signal in "
+            "the outermost 100&nbsp;bp on each side so the flanks sit at 1. The "
+            "score is the peak of that normalised profile."
+            f"{csv_note}</p>"
+            f"<img alt='TSS enrichment' src='data:image/png;base64,{tss_b64}'>"
+            "</section>"
+        )
+
     sections = [
         _html_section(
             "Read statistics",
@@ -749,11 +936,10 @@ def _render_html(
     if "tss_enrichment" in metrics:
         sections.append(
             _html_section(
-                "TSS enrichment",
-                "Accessible-chromatin enrichment of Tn5 insertions around "
-                "transcription start sites.",
+                "TSS enrichment metrics",
+                "The numbers behind the profile plotted above.",
                 "tss_enrichment",
-                {"score": metrics["tss_enrichment"]["score"]},
+                metrics["tss_enrichment"],
             )
         )
 
@@ -823,6 +1009,7 @@ def _render_html(
         f"FASTA: <code>{fasta_path}</code></p>"
         f"<div class='cards'>{cards_html}</div>"
         f"{img_html}"
+        f"{tss_html}"
         f"{motif_html}"
         + "".join(sections)
         + ctx_section
@@ -846,9 +1033,11 @@ def run_qc(
 ) -> dict:
     """Compute QC metrics for a deaminase chromatin-accessibility BAM.
 
-    Writes two files: a machine-readable ``<out_dir>/<out_name>.json`` and a
+    Writes a machine-readable ``<out_dir>/<out_name>.json`` and a
     self-contained, MultiQC-style ``<out_dir>/<out_name>.html`` report that
-    embeds the summary figure and documents every metric inline.
+    embeds the summary figure and documents every metric inline. With
+    ``tss_path``, the aggregate TSS profile behind the report's plot is also
+    written to ``<out_dir>/<out_name>.tss_enrichment.csv``.
 
     Parameters
     ----------
@@ -861,8 +1050,9 @@ def run_qc(
     out_name : str
         Base name (without extension) for the ``.json`` and ``.html`` outputs.
     tss_path : str, optional
-        BED file of transcription start sites. When supplied, an ATAC-style TSS
-        enrichment score and profile are computed.
+        BED file of transcription start sites. When supplied, an ENCODE-style
+        TSS enrichment score and aggregate profile are computed. Column 6 is
+        read as the strand when present, so minus-strand TSS are flipped.
     min_mapq : int, default 20
         Minimum read mapping quality.
     min_baseq : int, default 20
@@ -870,7 +1060,9 @@ def run_qc(
     threads : int, default 1
         Number of worker threads for per-chromosome processing.
     tss_flank : int, default 2000
-        Half-width (bp) of the window around each TSS for enrichment.
+        Half-width (bp) of the window around each TSS for enrichment. The
+        ENCODE default is 2000; it is rounded down to a whole number of 10-bp
+        bins.
     plot : bool, default True
         Whether to render and embed the summary figure in the HTML report.
     n_reads : int, optional
@@ -945,15 +1137,17 @@ def run_qc(
         f"{merged.total_edits}/{merged.total_opportunities} edits/opportunities"
     )
 
-    tss_score: float | None = None
-    tss_profile: np.ndarray | None = None
+    tss: _TssResult | None = None
     if tss_path is not None:
         logger.info(f"TSS:   {tss_path}")
-        tss_score, tss_profile = _tss_enrichment(
-            bam_path, tss_path, chrom_sizes, min_mapq, tss_flank
-        )
+        tss = _tss_enrichment(bam_path, tss_path, chrom_sizes, min_mapq, tss_flank)
 
-    metrics = _build_metrics(merged, tss_score, tss_profile)
+    os.makedirs(out_dir, exist_ok=True)
+    json_path = os.path.join(out_dir, f"{out_name}.json")
+    html_path = os.path.join(out_dir, f"{out_name}.html")
+    tss_csv_name = f"{out_name}.tss_enrichment.csv" if tss is not None else None
+
+    metrics = _build_metrics(merged, tss, tss_csv_name)
     metrics["sampling"] = {
         "subsampled": sample_fraction < 1.0,
         "requested_reads": n_reads,
@@ -961,9 +1155,10 @@ def run_qc(
         "reads_in_bam": total_reads,
     }
 
-    os.makedirs(out_dir, exist_ok=True)
-    json_path = os.path.join(out_dir, f"{out_name}.json")
-    html_path = os.path.join(out_dir, f"{out_name}.html")
+    if tss is not None and tss_csv_name is not None:
+        tss_csv_path = os.path.join(out_dir, tss_csv_name)
+        logger.info(f"Writing {tss_csv_path}")
+        _write_tss_csv(tss_csv_path, tss)
 
     logger.info(f"Writing {json_path}")
     with open(json_path, "w") as f:
@@ -971,11 +1166,14 @@ def run_qc(
 
     img_b64 = _figure_base64(metrics, merged) if plot else None
     motif_b64 = _motif_logo_base64(merged.motif_pwm) if plot else None
+    tss_b64 = _tss_figure_base64(tss) if plot and tss is not None else None
 
     logger.info(f"Writing {html_path}")
     with open(html_path, "w") as f:
         f.write(
-            _render_html(metrics, img_b64, motif_b64, bam_path, fasta_path, out_name)
+            _render_html(
+                metrics, img_b64, motif_b64, tss_b64, bam_path, fasta_path, out_name
+            )
         )
 
     logger.info("Done")

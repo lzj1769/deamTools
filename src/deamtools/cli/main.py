@@ -530,12 +530,14 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
             "    trinucleotide (G->A events reverse-complemented to the C->T\n"
             "    orientation) -- the enzyme's sequence-preference fingerprint.\n"
             "  * Fragment-length distribution from properly-paired reads.\n"
-            "  * TSS enrichment (optional, when --tss is supplied).\n"
+            "  * TSS enrichment, ENCODE ATAC-seq pipeline style (optional, when\n"
+            "    --tss is supplied).\n"
             "\n"
-            "Two files are written: a machine-readable JSON and a self-contained,\n"
-            "MultiQC-style HTML report that embeds the summary figure and\n"
-            "documents the meaning of every metric inline\n"
-            "(<out_dir>/<out_name>.json and .html)."
+            "A machine-readable JSON and a self-contained, MultiQC-style HTML\n"
+            "report that embeds the summary figure and documents the meaning of\n"
+            "every metric inline are written to <out_dir>/<out_name>.json and\n"
+            ".html. With --tss, the aggregate TSS profile behind the report's plot\n"
+            "also goes to <out_name>.tss_enrichment.csv."
         ),
         epilog=(
             "examples:\n"
@@ -550,8 +552,9 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
             "notes:\n"
             "  * The BAM must be coordinate-sorted and indexed (.bai).\n"
             "  * The FASTA must be indexed with 'samtools faidx' (.fai).\n"
-            "  * The TSS BED is read as (chrom, start, end); the TSS is taken as\n"
-            "    the interval midpoint."
+            "  * The TSS BED is read as (chrom, start, end[, name, score, strand]);\n"
+            "    the TSS is the interval midpoint, and column 6 is used as the\n"
+            "    strand when present so minus-strand TSS are flipped."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -580,15 +583,19 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="NAME",
         help=(
             "Base name (without extension) for the outputs; writes "
-            "<out_dir>/<out_name>.json and <out_dir>/<out_name>.html."
+            "<out_dir>/<out_name>.json and <out_dir>/<out_name>.html (plus "
+            "<out_name>.tss_enrichment.csv with --tss)."
         ),
     )
     parser.add_argument(
         "--tss",
         metavar="FILE",
         help=(
-            "BED file of transcription start sites. When supplied, an "
-            "ATAC-style TSS enrichment score and profile are computed."
+            "BED file of transcription start sites. When supplied, a TSS "
+            "enrichment score and aggregate profile are computed the way the "
+            "ENCODE ATAC-seq pipeline defines them: insertion 5' ends binned at "
+            "10 bp over the window, minus-strand TSS flipped, normalised to the "
+            "outermost 100 bp on each side, score = peak of that profile."
         ),
     )
     parser.add_argument(
@@ -610,7 +617,10 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         default=2000,
         metavar="INT",
-        help="Half-width in bp of the window around each TSS. Default: %(default)s.",
+        help=(
+            "Half-width in bp of the window around each TSS, rounded down to a "
+            "whole number of 10-bp bins. Default: %(default)s (the ENCODE value)."
+        ),
     )
     parser.add_argument(
         "--min_mapq",

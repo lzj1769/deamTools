@@ -2,7 +2,7 @@
 
 Compute quality-control metrics for a deaminase-based chromatin accessibility experiment from a coordinate-sorted BAM and its reference FASTA.
 
-Two files are produced: a machine-readable `<out_dir>/<out_name>.json` and a self-contained, MultiQC-style `<out_dir>/<out_name>.html` report. The HTML embeds the summary figure and documents the meaning of every metric inline.
+A machine-readable `<out_dir>/<out_name>.json` and a self-contained, MultiQC-style `<out_dir>/<out_name>.html` report are produced. The HTML embeds the summary figure and documents the meaning of every metric inline. With `--tss`, a third file `<out_dir>/<out_name>.tss_enrichment.csv` holds the per-bin numbers behind the TSS plot.
 
 ## Synopsis
 
@@ -17,7 +17,7 @@ deamtools qc --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 | `--bam FILE` | Coordinate-sorted BAM file. Must be accompanied by an index (`.bai`). |
 | `--fasta FILE` | Reference FASTA file used during alignment. Must be indexed with `samtools faidx` (`.fai`). |
 | `--out_dir DIR` | Output directory. Created automatically if it does not exist. |
-| `--out_name NAME` | Base name (without extension) for the outputs. Writes `<out_dir>/<out_name>.json` and `<out_dir>/<out_name>.html`. |
+| `--out_name NAME` | Base name (without extension) for the outputs. Writes `<out_dir>/<out_name>.json` and `<out_dir>/<out_name>.html`, plus `<out_name>.tss_enrichment.csv` when `--tss` is given. |
 
 ## Optional arguments
 
@@ -25,8 +25,8 @@ deamtools qc --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 
 | Argument | Default | Description |
 |---|---|---|
-| `--tss FILE` | *(disabled)* | BED file of transcription start sites. When supplied, an ATAC-style TSS enrichment score and profile are computed. The TSS is taken as the midpoint of each `(chrom, start, end)` interval. |
-| `--tss_flank INT` | `2000` | Half-width in base pairs of the window around each TSS. The profile spans `2 * tss_flank + 1` positions. |
+| `--tss FILE` | *(disabled)* | BED file of transcription start sites. When supplied, a TSS enrichment score and aggregate profile are computed. The TSS is the midpoint of each `(chrom, start, end)` interval. Strand is read from column 6, or from column 4 for four-column `chrom start end strand` files; minus-strand TSS are flipped so upstream is always on the left. |
+| `--tss_flank INT` | `2000` | Half-width in base pairs of the window around each TSS, rounded down to a whole number of 10 bp bins. The profile spans `2 * tss_flank / 10` bins. |
 
 ### Quality filters
 
@@ -162,10 +162,10 @@ The fraction of editable bases that were actually edited, computed **per read**.
 |---|---|
 | `n_reads` | Number of reads with at least one editable base (the rest cannot have a rate). |
 | `mean`, `median` | Centre of the per-read edit-rate distribution. `mean` is exact; `median` is taken from the histogram bin centres. |
-| `histogram` | Counts across 50 equal-width bins spanning the `[0, 1]` rate range. |
-| `bin_edges` | The 51 bin boundaries, so `histogram[i]` covers `[bin_edges[i], bin_edges[i+1])`. |
+| `histogram` | Counts across 200 equal-width bins spanning the `[0, 1]` rate range. |
+| `bin_edges` | The 201 bin boundaries, so `histogram[i]` covers `[bin_edges[i], bin_edges[i+1])`. |
 
-This complements `mean_edits_per_read`: the raw count scales with read length and coverage of editable bases, whereas the rate normalises by how many editable bases each read actually had, making it directly comparable across reads and libraries. A higher, well-separated distribution indicates stronger, more uniform deaminase activity. The distribution is drawn as its own panel in the PNG summary.
+This complements `mean_edits_per_read`: the raw count scales with read length and coverage of editable bases, whereas the rate normalises by how many editable bases each read actually had, making it directly comparable across reads and libraries. A higher, well-separated distribution indicates stronger, more uniform deaminase activity. The distribution is drawn as its own panel in the PNG summary, on a log-like x axis (linear below 0.01) because real rates pile up well below 0.1.
 
 ### Trinucleotide context bias (`context`)
 
@@ -177,26 +177,45 @@ For each cytosine-centred trinucleotide (e.g. `TCG`, `ACA`), the number of `edit
 
 ### TSS enrichment (`tss_enrichment`, optional)
 
-Present only when `--tss` is supplied. The Tn5 insertion 5′ end (`reference_start` on forward reads, `reference_end − 1` on reverse reads) is aggregated into a profile centred on every TSS, normalised by the mean insertion density in the outermost 100 bp of each flank. The `score` is the mean of the normalised profile in the central ±50 bp window; the `profile` array is the full normalised curve. Higher is better — a value above ~6–10 indicates good accessible-chromatin enrichment.
+Present only when `--tss` is supplied. Computed the way the [ENCODE ATAC-seq pipeline](https://github.com/ENCODE-DCC/atac-seq-pipeline) defines it:
+
+1. Take a ±`--tss_flank` window (ENCODE: 2 kb) around each TSS and bin it at 10 bp.
+2. Count insertion 5′ ends — `reference_start` on forward reads, `reference_end − 1` on reverse reads — into those bins, flipping the window for minus-strand TSS so upstream is always on the left.
+3. Average over TSS, then apply the Greenleaf normalisation: divide by the mean of the two edge means, each over the outermost 100 bp, so the flanks sit at 1.
+4. The `score` is the **peak** of that normalised profile.
+
+| Field | Description |
+|---|---|
+| `score` | Peak of the normalised profile. Higher is better; ENCODE calls ≥5 acceptable and ≥7 ideal for human ATAC, and the ACCESS-ATAC preprint reports ~13–14 for a good library. |
+| `n_tss` | TSS that contributed — those on a contig present in the BAM header whose full window fits inside it. |
+| `flank`, `bin_size` | Window half-width and bin width actually used, in bp. |
+| `background` | Mean insertions per TSS per bin in the outermost 100 bp on each side; the divisor in step 3. |
+| `total_insertions` | Insertion sites counted across all TSS windows. |
+| `profile_csv` | Name of the CSV holding the profile itself. |
+
+The profile is not duplicated in the JSON. It lives in **`<out_name>.tss_enrichment.csv`**, one row per bin with columns `position` (bin centre, bp from the TSS), `insertions` (raw count summed over TSS), `mean_insertions_per_tss`, and `normalized` (the plotted curve).
+
+One deviation from ENCODE is deliberate. ENCODE reaches the insertion site indirectly, asking `metaseq` for read *coverage* shifted by `−read_len/2` so each read's interval is centred on its cut site; that spreads every insertion over a read-length-wide box, smoothing the profile and depressing the peak. `deamtools` counts the cut site itself at 1 bp — which is what that shift is approximating — so scores run slightly above ENCODE's for the same library, by more the longer the reads.
 
 ## Output
 
-Two files are written to `--out_dir`:
-
 **`<out_name>.json`** — a machine-readable document with all the sections described above. Suitable for aggregating across many samples (for example, feeding into a comparison table).
 
-**`<out_name>.html`** — a self-contained, MultiQC-style report (no external files or network needed). It opens with headline summary cards, embeds the multi-panel summary figure, and presents every metric in a table alongside a plain-language description of its meaning. The embedded figure (omitted with `--no_plot`) has the panels:
+**`<out_name>.html`** — a self-contained, MultiQC-style report (no external files or network needed). It opens with headline summary cards, embeds the plots, and presents every metric in a table alongside a plain-language description of its meaning. The embedded figures (omitted with `--no_plot`) are the four-panel summary figure:
 
 1. Trinucleotide context edit fraction (enzyme fingerprint)
 2. Edits-per-read histogram (raw count)
 3. Per-read edit-rate distribution (edited / editable)
 4. Fragment-length distribution
-5. TSS enrichment profile (only when `--tss` is supplied)
+
+plus the deaminase sequence-motif logo, and — when `--tss` is supplied — the TSS enrichment profile, with the score marked on the curve.
+
+**`<out_name>.tss_enrichment.csv`** — written only with `--tss`; the per-bin numbers behind that plot, as described above.
 
 ## Choosing parameters
 
 **`--min_mapq` / `--min_baseq`** — Keep these consistent with the values used in `bam2bw` / `bam2fragment` so the QC reflects the data your downstream analysis actually sees. Defaults of 20 correspond to ~99% accuracy.
 
-**`--tss_flank`** — 2000 bp (default) matches the conventional ATAC TSS-enrichment window. There is rarely a reason to change it.
+**`--tss_flank`** — 2000 bp (default) is the ENCODE window. Changing it changes the background, since that is defined relative to the window edges, so a score computed with a different flank is not comparable to a published one.
 
 **`--threads`** — Parallelism is at the chromosome level; setting `--threads` above the number of chromosomes provides no benefit. The optional TSS-enrichment pass runs separately and is not parallelised.
