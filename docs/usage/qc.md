@@ -61,6 +61,12 @@ that probability, which makes the sample uniform across the genome rather than
 biased toward the first chromosomes. The draw is seeded, so rerunning the same
 command samples the same reads.
 
+**The draw is blind to what a read contains.** The coin is flipped before the
+read is examined, so a read carrying no editing event is kept at exactly the
+same rate as one full of them — nothing is filtered on edits, mapping quality,
+or anything else at sampling time. (The usual filters still apply afterwards,
+to the sampled reads, exactly as in a full run.)
+
 Rates and distributions are unbiased under this sampling: the editing rate,
 duplicate rate, trinucleotide context bias, motif PWM and fragment-length
 distribution all mean the same thing as in a full run. **The absolute counts are
@@ -160,7 +166,7 @@ The fraction of editable bases that were actually edited, computed **per read**.
 
 | Field | Description |
 |---|---|
-| `n_reads` | Number of reads with at least one editable base (the rest cannot have a rate). |
+| `n_reads_with_editable_bases` | Reads covering at least one reference C or G — the rest have no denominator and so no rate. This counts editable *bases*, not editing *events*: a read with no edit at all still contributes, at rate 0. Unrelated to the `--n_reads` subsampling flag. |
 | `mean`, `median` | Centre of the per-read edit-rate distribution. `mean` is exact; `median` is taken from the histogram bin centres. |
 | `histogram` | Counts across 200 equal-width bins spanning the `[0, 1]` rate range. |
 | `bin_edges` | The 201 bin boundaries, so `histogram[i]` covers `[bin_edges[i], bin_edges[i+1])`. |

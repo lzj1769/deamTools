@@ -503,7 +503,9 @@ def _build_metrics(
             "median_edits_per_read": per_read["median"],
         },
         "edit_rate_per_read": {
-            "n_reads": stats.edit_rate_n,
+            # Not called `n_reads`: that is the --n_reads subsample size, which
+            # is a plain uniform draw with no condition on the read at all.
+            "n_reads_with_editable_bases": stats.edit_rate_n,
             "mean": rate_mean,
             "median": rate_median,
             "histogram": [int(c) for c in stats.edit_rate_hist],
@@ -755,7 +757,12 @@ _METRIC_DOCS: dict[str, dict[str, str]] = {
         "median_edits_per_read": "Median number of edits per read.",
     },
     "edit_rate_per_read": {
-        "n_reads": "Reads with at least one editable C/G base.",
+        "n_reads_with_editable_bases": (
+            "Reads covering at least one reference C or G, which is what a "
+            "per-read edit rate needs a denominator for. Note this counts "
+            "editable bases, not editing events: a read with no edit at all "
+            "still contributes, at rate 0. Unrelated to <code>--n_reads</code>."
+        ),
         "mean": (
             "Mean of the per-read edit rate, where a read's rate = (edited C/G) "
             "/ (editable C/G), counted strand-agnostically over every reference "
@@ -1072,6 +1079,12 @@ def run_qc(
         which is read from the BAM index, so nothing is scanned twice), and
         the draw is seeded, so a rerun samples the same reads. Ignored when
         the BAM already holds fewer reads than this.
+
+        The draw is blind to what a read contains: the coin is flipped before
+        the read is looked at, so reads carrying no editing event are kept at
+        exactly the same rate as reads full of them. (Do not confuse this with
+        ``edit_rate_per_read.n_reads_with_editable_bases``, which *is*
+        conditional -- on covering a reference C or G, not on being edited.)
 
         Rates and distributions -- editing rate, duplicate rate, context bias,
         the motif PWM, fragment lengths -- are unbiased under this sampling.

@@ -148,7 +148,7 @@ class TestQC:
         m = run_qc(bam, fasta_file, out_dir, "qc", min_mapq=0, min_baseq=0, plot=False)
 
         erpr = m["edit_rate_per_read"]
-        assert erpr["n_reads"] == 1
+        assert erpr["n_reads_with_editable_bases"] == 1
         assert erpr["mean"] == pytest.approx(1 / 6, abs=1e-6)
         assert sum(erpr["histogram"]) == 1
         assert len(erpr["histogram"]) == len(erpr["bin_edges"]) - 1
@@ -521,6 +521,27 @@ class TestSubsampling:
         bam = self._bam_with(tmp_path, 20, fasta_file)
         with pytest.raises(ValueError, match="n_reads must be positive"):
             run_qc(bam, fasta_file, str(tmp_path / "o"), "z", plot=False, n_reads=0)
+
+    def test_draw_ignores_whether_a_read_carries_an_edit(self, tmp_path, fasta_file):
+        """The coin is flipped on the read, never on its content.
+
+        Every other read here carries no editing event at all. A sampler that
+        required an edit -- or merely favoured edited reads -- would push
+        mean_edits_per_read up towards 1; a blind draw leaves it at 0.5.
+        """
+        edited = REF_SEQ[:1] + "T" + REF_SEQ[2:]  # one C->T at position 1
+        reads = [
+            _make_read(f"r{i}", edited if i % 2 else REF_SEQ, 0) for i in range(1000)
+        ]
+        bam = _write_bam(str(tmp_path / "mix.bam"), reads)
+
+        full = run_qc(bam, fasta_file, str(tmp_path / "f"), "f", plot=False)
+        sub = run_qc(bam, fasta_file, str(tmp_path / "s"), "s", plot=False, n_reads=500)
+
+        assert full["editing"]["mean_edits_per_read"] == pytest.approx(0.5)
+        # Binomial(~500, 0.5) on the sample: sd ~= 0.022, so this band is ~5 sd.
+        assert sub["editing"]["mean_edits_per_read"] == pytest.approx(0.5, abs=0.11)
+        assert 0 < sub["reads"]["total"] < 1000
 
     def test_editing_rate_is_unbiased_by_sampling(self, tmp_path, fasta_file):
         """A rate must survive subsampling; only absolute counts shrink."""

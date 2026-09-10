@@ -605,11 +605,13 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="INT",
         help=(
             "Subsample to approximately this many reads instead of using all "
-            "of them, for a faster pass over a large BAM. Reads are drawn "
-            "uniformly across the genome and the draw is seeded, so a rerun "
-            "samples the same reads. Rates and distributions stay unbiased; "
-            "the absolute counts reported are counts of the sample. Default: "
-            "use every read."
+            "of them, for a faster pass over a large BAM. Every read gets the "
+            "same chance, whatever it contains -- no filtering on editing "
+            "events, mapping quality or anything else enters the draw -- and "
+            "it is uniform across the genome and seeded, so a rerun samples "
+            "the same reads. Rates and distributions stay unbiased; the "
+            "absolute counts reported are counts of the sample. Default: use "
+            "every read."
         ),
     )
     parser.add_argument(
