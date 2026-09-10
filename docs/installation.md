@@ -23,31 +23,49 @@ conda install -c bioconda samtools bwa
 
 ## Install DeamTools
 
-### From GitHub (recommended)
+### From PyPI (recommended)
 
 ```bash
-git clone https://github.com/lzj1769/deamTools.git
-cd deamTools
-pip install .
+pip install deamtools
+# or
+uv pip install deamtools
+```
+
+To also install the optional `seq2edit` model, which pulls in PyTorch:
+
+```bash
+pip install "deamtools[seq2edit]"
+```
+
+### From GitHub
+
+```bash
+pip install git+https://github.com/lzj1769/deamTools.git
 ```
 
 ### Development install
 
-To modify the source or run the test suite, install in editable mode with the `dev` extras:
+The project is managed with [uv](https://docs.astral.sh/uv/), and `uv.lock` is
+committed, so `uv sync` reproduces the development environment exactly:
 
 ```bash
-pip install -e ".[dev]"
+git clone https://github.com/lzj1769/deamTools.git
+cd deamTools
+uv sync --extra dev
+uv run pytest
 ```
 
-This additionally installs `pytest`, `pytest-cov`, `ruff`, `black`, and `mypy`.
+This additionally installs `pytest`, `pytest-cov`, `ruff`, `black`, and `mypy`. Run
+tools through `uv run` (for example `uv run ruff check src/ tests/`); there is no
+need to activate the environment.
 
 ### Documentation extras
 
 This documentation is built with Sphinx (MyST Markdown + the Read the Docs theme). To build it locally:
 
 ```bash
-pip install -e ".[docs]"
-sphinx-build -b html docs docs/_build/html
+uv sync --extra docs
+uv run sphinx-build -b html docs docs/_build/html
 # open docs/_build/html/index.html
 ```
 
@@ -80,7 +98,7 @@ deamtools --help
 
 ```bash
 cd deamTools
-pytest
+uv run pytest
 ```
 
 The test suite uses synthetic BAM and FASTA fixtures created in a temporary directory, so no external data files — and no `bwa`/`samtools` — are required to run it.

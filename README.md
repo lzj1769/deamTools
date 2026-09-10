@@ -13,15 +13,19 @@ For each aligned read, DeamTools scans reference cytosine positions covered by t
 **Requirements:** Python ≥ 3.12, `samtools` (for indexing BAM/FASTA files).
 
 ```bash
-git clone https://github.com/lzj1769/deamTools.git
-cd deamTools
-pip install .
+pip install deamtools
+# or
+uv pip install deamtools
 ```
 
-For development (adds pytest, ruff, black, mypy):
+For development, clone the repository and use [uv](https://docs.astral.sh/uv/),
+which builds the environment from the committed `uv.lock`:
 
 ```bash
-pip install -e ".[dev]"
+git clone https://github.com/lzj1769/deamTools.git
+cd deamTools
+uv sync --extra dev        # adds pytest, ruff, black, mypy
+uv run pytest
 ```
 
 ## Quick start
