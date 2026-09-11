@@ -150,10 +150,14 @@ class TestQC:
         erpr = m["edit_rate_per_fragment"]
         assert erpr["n_fragments_with_editable_bases"] == 1
         assert erpr["mean"] == pytest.approx(1 / 6, abs=1e-6)
-        assert sum(erpr["histogram"]) == 1
-        assert len(erpr["histogram"]) == len(erpr["bin_edges"]) - 1
-        # The single read falls in the bin covering 1/6.
-        assert erpr["histogram"][int((1 / 6) * len(erpr["histogram"]))] == 1
+        # The histogram lives in its CSV, like the TSS profile.
+        assert "histogram" not in erpr
+        with open(os.path.join(out_dir, erpr["histogram_csv"])) as f:
+            rows = list(csv.DictReader(f))
+        assert sum(int(r["fragments"]) for r in rows) == 1
+        # The single fragment falls in the bin covering 1/6.
+        hit = [r for r in rows if int(r["fragments"])]
+        assert float(hit[0]["bin_start"]) <= 1 / 6 < float(hit[0]["bin_end"])
 
     def test_edit_rate_counts_both_strands_as_editable(self, tmp_path, fasta_file):
         # A reverse read's editable bases are also counted as reference C or G.
@@ -281,6 +285,69 @@ class TestQC:
         assert "data:image/png;base64," not in html
         # Tables and descriptions are still present without the figure.
         assert "Trinucleotide context bias" in html
+
+
+class TestDistributionCsvs:
+    """The numbers behind the summary figure's histograms, one CSV each."""
+
+    def _run(self, tmp_path, fasta_file, reads, **kw):
+        bam = _write_bam(str(tmp_path / "x.bam"), reads)
+        out = str(tmp_path / "o")
+        m = run_qc(bam, fasta_file, out, "s", min_mapq=0, min_baseq=0, **kw)
+        return m, out
+
+    def _rows(self, out, name):
+        with open(os.path.join(out, name)) as f:
+            return list(csv.DictReader(f))
+
+    def test_edits_per_fragment_csv(self, tmp_path, fasta_file):
+        # Two fragments with one C->T edit, one with none.
+        reads = [
+            _make_read("a", "ACGTTGATCG", 0, is_paired=False),
+            _make_read("b", "ACGTTGATCG", 0, is_paired=False),
+            _make_read("c", REF_SEQ, 0, is_paired=False),
+        ]
+        m, out = self._run(tmp_path, fasta_file, reads, plot=False)
+        name = m["editing"]["edits_per_fragment_csv"]
+        assert name == "s.edits_per_fragment.csv"
+        rows = self._rows(out, name)
+        assert list(rows[0]) == ["edits", "fragments", "fraction", "is_overflow"]
+        assert len(rows) == qc._MAX_EDITS + 1
+        assert int(rows[0]["fragments"]) == 1 and int(rows[1]["fragments"]) == 2
+        assert float(rows[1]["fraction"]) == pytest.approx(2 / 3, rel=1e-5)
+        # Only the last row is the overflow bin.
+        assert [r["is_overflow"] for r in rows].count("True") == 1
+        assert rows[-1]["is_overflow"] == "True"
+
+    def test_edit_rate_csv_bins_tile_zero_to_one(self, tmp_path, fasta_file):
+        reads = [_make_read("a", "ACGTTGATCG", 0, is_paired=False)]
+        m, out = self._run(tmp_path, fasta_file, reads, plot=False)
+        name = m["edit_rate_per_fragment"]["histogram_csv"]
+        assert name == "s.edit_rate_per_fragment.csv"
+        rows = self._rows(out, name)
+        assert list(rows[0]) == ["bin_start", "bin_end", "fragments", "fraction"]
+        assert len(rows) == qc._RATE_BINS
+        assert float(rows[0]["bin_start"]) == 0.0
+        assert float(rows[-1]["bin_end"]) == 1.0
+        for prev, cur in zip(rows, rows[1:], strict=False):
+            assert float(prev["bin_end"]) == pytest.approx(float(cur["bin_start"]))
+
+    def test_csvs_are_written_even_without_plots(self, tmp_path, fasta_file):
+        reads = [_make_read("a", REF_SEQ, 0, is_paired=False)]
+        _, out = self._run(tmp_path, fasta_file, reads, plot=False)
+        assert os.path.exists(os.path.join(out, "s.edits_per_fragment.csv"))
+        assert os.path.exists(os.path.join(out, "s.edit_rate_per_fragment.csv"))
+        # No --tss, so no TSS CSV.
+        assert not os.path.exists(os.path.join(out, "s.tss_enrichment.csv"))
+
+    def test_report_header_is_a_table(self, tmp_path, fasta_file):
+        reads = [_make_read("a", REF_SEQ, 0, is_paired=False)]
+        _, out = self._run(tmp_path, fasta_file, reads, plot=False)
+        html = open(os.path.join(out, "s.html")).read()
+        assert "<table class='meta-table'>" in html
+        for label in ("Sample", "Library", "BAM", "FASTA", "deamtools", "Generated"):
+            assert f"<tr><th>{label}</th>" in html
+        assert "<th>TSS BED</th>" not in html  # only listed when --tss is given
 
 
 class TestLibraryLayout:

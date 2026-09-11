@@ -38,7 +38,10 @@ metrics most useful for judging a deaminase footprinting experiment:
 
 Results are written as machine-readable JSON plus a self-contained,
 MultiQC-style HTML report (``<out_dir>/<out_name>.json`` and ``.html``, plus
-``<out_name>.tss_enrichment.csv`` when a TSS BED is given). The HTML embeds the
+``<out_name>.tss_enrichment.csv`` when a TSS BED is given). The two plotted editing
+distributions are also written as ``<out_name>.edits_per_fragment.csv`` and
+``<out_name>.edit_rate_per_fragment.csv``, so they can be re-drawn without a rerun.
+The HTML embeds the
 multi-panel summary figure and documents the meaning of every metric inline.
 """
 
@@ -47,6 +50,7 @@ from __future__ import annotations
 import base64
 import csv
 import hashlib
+import html
 import io
 import json
 import logging
@@ -63,6 +67,7 @@ import pysam
 from deamtools.utils import (
     Fragment,
     get_chrom_sizes_from_bam,
+    get_version,
     iter_fragments,
     merge_fragment_bases,
 )
@@ -95,6 +100,16 @@ _SAMPLE_KEY = b"deamtools-qc-20260910"
 LAYOUT_PAIRED = "paired-end"
 LAYOUT_SINGLE = "single-end"
 _LAYOUT_PROBE = 10_000  # records read from the start of the file to decide it
+
+# Companion CSVs: the numbers behind each plotted distribution, one file each,
+# named <out_name>.<kind>.csv. The JSON names them rather than repeating them.
+_CSV_EDITS = "edits_per_fragment"
+_CSV_RATE = "edit_rate_per_fragment"
+_CSV_TSS = "tss_enrichment"
+
+
+def _csv_name(out_name: str, kind: str) -> str:
+    return f"{out_name}.{kind}.csv"
 
 
 def _revcomp(seq: str) -> str:
@@ -501,6 +516,47 @@ def _tss_enrichment(
     return _TssResult(score, positions, counts, profile, background, n_tss, bin_size)
 
 
+def _write_edits_per_fragment_csv(path: str, hist: np.ndarray) -> None:
+    """Write the edits-per-fragment histogram, the numbers behind panel 2.
+
+    One row per edit count ``0 .. _MAX_EDITS``. The last row is an overflow bin
+    holding every fragment with *at least* that many edits, and is flagged in
+    ``is_overflow`` so a re-plot can label or drop it.
+    """
+    total = int(hist.sum())
+    last = len(hist) - 1
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["edits", "fragments", "fraction", "is_overflow"])
+        for edits, count in enumerate(hist):
+            fraction = count / total if total else 0.0
+            writer.writerow([edits, int(count), f"{fraction:.6g}", edits == last])
+
+
+def _write_edit_rate_csv(path: str, hist: np.ndarray) -> None:
+    """Write the per-fragment edit-rate histogram, the numbers behind panel 3.
+
+    One row per bin of width ``1 / _RATE_BINS``. Bins are half-open
+    ``[bin_start, bin_end)`` except the last, which also holds a rate of
+    exactly 1.
+    """
+    n_bins = len(hist)
+    total = int(hist.sum())
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["bin_start", "bin_end", "fragments", "fraction"])
+        for i, count in enumerate(hist):
+            fraction = count / total if total else 0.0
+            writer.writerow(
+                [
+                    f"{i / n_bins:g}",
+                    f"{(i + 1) / n_bins:g}",
+                    int(count),
+                    f"{fraction:.6g}",
+                ]
+            )
+
+
 def _write_tss_csv(path: str, tss: _TssResult) -> None:
     """Write the aggregate TSS profile -- the numbers behind the plot -- as CSV."""
     mean_per_tss = tss.counts / tss.n_tss
@@ -532,7 +588,7 @@ def _histogram_summary(hist: np.ndarray) -> dict[str, float]:
 def _build_metrics(
     stats: _Stats,
     tss: _TssResult | None,
-    tss_csv_name: str | None,
+    out_name: str,
     layout: str = LAYOUT_PAIRED,
 ) -> dict:
     edit_rate = (
@@ -585,6 +641,7 @@ def _build_metrics(
             "global_edit_rate": edit_rate,
             "mean_edits_per_fragment": per_fragment["mean"],
             "median_edits_per_fragment": per_fragment["median"],
+            "edits_per_fragment_csv": _csv_name(out_name, _CSV_EDITS),
         },
         "edit_rate_per_fragment": {
             # Not called `n_reads`: that is the --n_reads subsample size, which
@@ -592,8 +649,8 @@ def _build_metrics(
             "n_fragments_with_editable_bases": stats.edit_rate_n,
             "mean": rate_mean,
             "median": rate_median,
-            "histogram": [int(c) for c in stats.edit_rate_hist],
-            "bin_edges": [round(i / _RATE_BINS, 4) for i in range(_RATE_BINS + 1)],
+            # Like the TSS profile, the histogram's one home is its CSV.
+            "histogram_csv": _csv_name(out_name, _CSV_RATE),
         },
         "context": context,
         "motif": {
@@ -625,7 +682,7 @@ def _build_metrics(
             "bin_size": tss.bin_size,
             "background": tss.background,
             "total_insertions": int(tss.counts.sum()),
-            "profile_csv": tss_csv_name,
+            "profile_csv": _csv_name(out_name, _CSV_TSS),
         }
     return metrics
 
@@ -870,6 +927,10 @@ _METRIC_DOCS: dict[str, dict[str, str]] = {
             "many edits, unlike the two Tn5 cut sites of a standard ATAC read."
         ),
         "median_edits_per_fragment": "Median number of edits per fragment.",
+        "edits_per_fragment_csv": (
+            "File holding the edits-per-fragment histogram plotted above (one "
+            "row per edit count; the last row is an overflow bin)."
+        ),
     },
     "edit_rate_per_fragment": {
         "n_fragments_with_editable_bases": (
@@ -886,6 +947,10 @@ _METRIC_DOCS: dict[str, dict[str, str]] = {
             "regardless of length or composition."
         ),
         "median": "Median of the per-fragment edit-rate distribution.",
+        "histogram_csv": (
+            "File holding the edit-rate histogram plotted above (one row per "
+            "bin, with its start, end, fragment count and fraction)."
+        ),
     },
     "fragment_length": {
         "mean": (
@@ -959,6 +1024,7 @@ def _render_html(
     bam_path: str,
     fasta_path: str,
     out_name: str,
+    tss_path: str | None = None,
 ) -> str:
     """Build a self-contained, MultiQC-style HTML QC report."""
     generated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1052,11 +1118,7 @@ def _render_html(
             "Distribution of each fragment's edited-fraction of its editable "
             "C/G bases. Plotted as its own panel in the summary figure above.",
             "edit_rate_per_fragment",
-            {
-                k: v
-                for k, v in metrics["edit_rate_per_fragment"].items()
-                if k not in ("histogram", "bin_edges")
-            },
+            metrics["edit_rate_per_fragment"],
         ),
     ]
     if "fragment_length" in metrics:
@@ -1111,12 +1173,36 @@ def _render_html(
         + "</tbody></table></section>"
     )
 
+    # Run provenance as a key/value table rather than a run-on line: the paths
+    # are long, and a table keeps each one on its own row, wrapped if need be.
+    meta_rows: list[tuple[str, str]] = [
+        ("Sample", f"<b>{html.escape(out_name)}</b>"),
+        ("Library", html.escape(metrics.get("library_layout", LAYOUT_PAIRED))),
+        ("BAM", f"<code>{html.escape(bam_path)}</code>"),
+        ("FASTA", f"<code>{html.escape(fasta_path)}</code>"),
+    ]
+    if tss_path is not None:
+        meta_rows.append(("TSS BED", f"<code>{html.escape(tss_path)}</code>"))
+    meta_rows += [
+        ("deamtools", html.escape(get_version())),
+        ("Generated", generated),
+    ]
+    meta_html = (
+        "<table class='meta-table'><tbody>"
+        + "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in meta_rows)
+        + "</tbody></table>"
+    )
+
     style = """
     body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       color:#222;margin:0;background:#f5f6f8;}
     .container{max-width:1000px;margin:0 auto;padding:24px;}
     h1{color:#16767a;margin-bottom:2px;}
-    .meta{color:#666;font-size:13px;margin-top:0;}
+    .meta-table{width:auto;max-width:100%;margin:4px 0 0;font-size:13px;}
+    .meta-table th{background:none;color:#666;font-weight:600;
+      padding:3px 16px 3px 0;border:none;white-space:nowrap;}
+    .meta-table td{padding:3px 0;border:none;color:#333;
+      word-break:break-all;}
     .cards{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0;}
     .card{background:#fff;border:1px solid #e2e5ea;border-radius:8px;
       padding:14px 18px;min-width:140px;flex:1;text-align:center;
@@ -1146,10 +1232,7 @@ def _render_html(
         "<title>DeamTools QC Report</title>"
         f"<style>{style}</style></head><body><div class='container'>"
         "<h1>DeamTools QC Report</h1>"
-        f"<p class='meta'>Sample: <b>{out_name}</b> &middot; Library: "
-        f"<b>{metrics.get('library_layout', LAYOUT_PAIRED)}</b> &middot; Generated "
-        f"{generated}<br>BAM: <code>{bam_path}</code><br>"
-        f"FASTA: <code>{fasta_path}</code></p>"
+        f"{meta_html}"
         f"<div class='cards'>{cards_html}</div>"
         f"{img_html}"
         f"{tss_html}"
@@ -1180,7 +1263,11 @@ def run_qc(
     self-contained, MultiQC-style ``<out_dir>/<out_name>.html`` report that
     embeds the summary figure and documents every metric inline. With
     ``tss_path``, the aggregate TSS profile behind the report's plot is also
-    written to ``<out_dir>/<out_name>.tss_enrichment.csv``.
+    written to ``<out_dir>/<out_name>.tss_enrichment.csv``. The edits-per-fragment
+    and edit-rate histograms behind the summary figure always go to
+    ``<out_name>.edits_per_fragment.csv`` and ``<out_name>.edit_rate_per_fragment.csv``,
+    written even when ``plot`` is False; the JSON names each file rather than
+    repeating the numbers.
 
     Parameters
     ----------
@@ -1306,9 +1393,7 @@ def run_qc(
     os.makedirs(out_dir, exist_ok=True)
     json_path = os.path.join(out_dir, f"{out_name}.json")
     html_path = os.path.join(out_dir, f"{out_name}.html")
-    tss_csv_name = f"{out_name}.tss_enrichment.csv" if tss is not None else None
-
-    metrics = _build_metrics(merged, tss, tss_csv_name, layout)
+    metrics = _build_metrics(merged, tss, out_name, layout)
     metrics["sampling"] = {
         "subsampled": sample_fraction < 1.0,
         "requested_reads": n_reads,
@@ -1316,10 +1401,19 @@ def run_qc(
         "reads_in_bam": total_reads,
     }
 
-    if tss is not None and tss_csv_name is not None:
-        tss_csv_path = os.path.join(out_dir, tss_csv_name)
-        logger.info(f"Writing {tss_csv_path}")
-        _write_tss_csv(tss_csv_path, tss)
+    # The numbers behind each plot, written whether or not the plots are.
+    edits_csv = os.path.join(out_dir, _csv_name(out_name, _CSV_EDITS))
+    logger.info(f"Writing {edits_csv}")
+    _write_edits_per_fragment_csv(edits_csv, merged.edits_per_fragment)
+
+    rate_csv = os.path.join(out_dir, _csv_name(out_name, _CSV_RATE))
+    logger.info(f"Writing {rate_csv}")
+    _write_edit_rate_csv(rate_csv, merged.edit_rate_hist)
+
+    if tss is not None:
+        tss_csv = os.path.join(out_dir, _csv_name(out_name, _CSV_TSS))
+        logger.info(f"Writing {tss_csv}")
+        _write_tss_csv(tss_csv, tss)
 
     logger.info(f"Writing {json_path}")
     with open(json_path, "w") as f:
@@ -1333,7 +1427,14 @@ def run_qc(
     with open(html_path, "w") as f:
         f.write(
             _render_html(
-                metrics, img_b64, motif_b64, tss_b64, bam_path, fasta_path, out_name
+                metrics,
+                img_b64,
+                motif_b64,
+                tss_b64,
+                bam_path,
+                fasta_path,
+                out_name,
+                tss_path,
             )
         )
 

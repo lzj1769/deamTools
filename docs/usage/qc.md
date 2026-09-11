@@ -2,7 +2,7 @@
 
 Compute quality-control metrics for a deaminase-based chromatin accessibility experiment from a coordinate-sorted BAM and its reference FASTA.
 
-A machine-readable `<out_dir>/<out_name>.json` and a self-contained, MultiQC-style `<out_dir>/<out_name>.html` report are produced. The HTML embeds the summary figure and documents the meaning of every metric inline. With `--tss`, a third file `<out_dir>/<out_name>.tss_enrichment.csv` holds the per-bin numbers behind the TSS plot.
+A machine-readable `<out_dir>/<out_name>.json` and a self-contained, MultiQC-style `<out_dir>/<out_name>.html` report are produced. The HTML embeds the summary figure and documents the meaning of every metric inline. Alongside them, every plotted distribution gets a CSV holding the numbers behind the plot, so it can be re-drawn without rerunning: `<out_name>.edits_per_fragment.csv` and `<out_name>.edit_rate_per_fragment.csv` always, and `<out_name>.tss_enrichment.csv` with `--tss`. These are written even with `--no_plot`.
 
 ## Synopsis
 
@@ -17,7 +17,7 @@ deamtools qc --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 | `--bam FILE` | Coordinate-sorted BAM file. Must be accompanied by an index (`.bai`). |
 | `--fasta FILE` | Reference FASTA file used during alignment. Must be indexed with `samtools faidx` (`.fai`). |
 | `--out_dir DIR` | Output directory. Created automatically if it does not exist. |
-| `--out_name NAME` | Base name (without extension) for the outputs. Writes `<out_dir>/<out_name>.json` and `<out_dir>/<out_name>.html`, plus `<out_name>.tss_enrichment.csv` when `--tss` is given. |
+| `--out_name NAME` | Base name (without extension) for the outputs. Writes `<out_dir>/<out_name>.json` and `<out_dir>/<out_name>.html`, the two distribution CSVs, and `<out_name>.tss_enrichment.csv` when `--tss` is given. |
 
 ## Optional arguments
 
@@ -192,6 +192,7 @@ The core signal-quality metrics:
 - **`total_edits`** — the number of those positions showing a deamination event: a `C→T` mismatch at a reference C or a `G→A` mismatch at a reference G, regardless of read orientation.
 - **`global_edit_rate`** — `total_edits / total_opportunities`. The single most important number: a successful deaminase treatment drives this well above the background sequencing-error rate.
 - **`mean_edits_per_fragment`**, **`median_edits_per_fragment`** — the per-fragment editing distribution. Deaminase fragments typically carry many edits, in contrast to the two Tn5 insertions of a standard ATAC read.
+- **`edits_per_fragment_csv`** — the file holding the full distribution (see [Output](#output)).
 
 ### Per-fragment edit rate (`edit_rate_per_fragment`)
 
@@ -201,8 +202,7 @@ The fraction of editable bases that were actually edited, computed **per fragmen
 |---|---|
 | `n_fragments_with_editable_bases` | Fragments covering at least one reference C or G — the rest have no denominator and so no rate. This counts editable *bases*, not editing *events*: a fragment with no edit at all still contributes, at rate 0. Unrelated to the `--n_reads` subsampling flag. |
 | `mean`, `median` | Centre of the per-fragment edit-rate distribution. `mean` is exact; `median` is taken from the histogram bin centres. |
-| `histogram` | Counts across 200 equal-width bins spanning the `[0, 1]` rate range. |
-| `bin_edges` | The 201 bin boundaries, so `histogram[i]` covers `[bin_edges[i], bin_edges[i+1])`. |
+| `histogram_csv` | The file holding the histogram: 200 equal-width bins over `[0, 1]` (see [Output](#output)). Like the TSS profile, the histogram itself is not repeated in the JSON. |
 
 This complements `mean_edits_per_fragment`: the raw count scales with fragment length and coverage of editable bases, whereas the rate normalises by how many editable bases each fragment actually had, making it directly comparable across fragments and libraries. A higher, well-separated distribution indicates stronger, more uniform deaminase activity. The distribution is drawn as its own panel in the PNG summary, on a log-like x axis (linear below 0.01) because real rates pile up well below 0.1.
 
@@ -249,7 +249,17 @@ One deviation from ENCODE is deliberate. ENCODE reaches the insertion site indir
 
 plus the deaminase sequence-motif logo, and — when `--tss` is supplied — the TSS enrichment profile, with the score marked on the curve.
 
-**`<out_name>.tss_enrichment.csv`** — written only with `--tss`; the per-bin numbers behind that plot, as described above.
+The numbers behind each plot are written as CSV, whether or not the figures are rendered:
+
+| File | Columns | Notes |
+|---|---|---|
+| `<out_name>.edits_per_fragment.csv` | `edits`, `fragments`, `fraction`, `is_overflow` | One row per edit count from 0 to 100. The last row is an **overflow bin** counting every fragment with at least 100 edits, flagged `is_overflow = True`. |
+| `<out_name>.edit_rate_per_fragment.csv` | `bin_start`, `bin_end`, `fragments`, `fraction` | 200 bins of width 0.005. Half-open `[bin_start, bin_end)`, except the last, which also holds a rate of exactly 1. |
+| `<out_name>.tss_enrichment.csv` | `position`, `insertions`, `mean_insertions_per_tss`, `normalized` | Only with `--tss`; columns as described under TSS enrichment above. |
+
+The JSON names each file (`editing.edits_per_fragment_csv`, `edit_rate_per_fragment.histogram_csv`, `tss_enrichment.profile_csv`) rather than repeating the numbers, so there is one copy of each distribution.
+
+The report opens with a table of the run's provenance — sample, library layout, the BAM, FASTA and (if given) TSS BED paths, the deamtools version and the time it was generated.
 
 ## Choosing parameters
 

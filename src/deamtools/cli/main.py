@@ -553,7 +553,9 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
             "report that embeds the summary figure and documents the meaning of\n"
             "every metric inline are written to <out_dir>/<out_name>.json and\n"
             ".html. With --tss, the aggregate TSS profile behind the report's plot\n"
-            "also goes to <out_name>.tss_enrichment.csv."
+            "also goes to <out_name>.tss_enrichment.csv, and the two plotted\n"
+            "editing distributions always go to <out_name>.edits_per_fragment.csv\n"
+            "and <out_name>.edit_rate_per_fragment.csv, for re-plotting."
         ),
         epilog=(
             "examples:\n"
@@ -600,6 +602,7 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
         help=(
             "Base name (without extension) for the outputs; writes "
             "<out_dir>/<out_name>.json and <out_dir>/<out_name>.html (plus "
+            "the edits-per-fragment and edit-rate CSVs, and "
             "<out_name>.tss_enrichment.csv with --tss)."
         ),
     )
