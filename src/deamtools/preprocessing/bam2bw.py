@@ -28,14 +28,16 @@ EVENT_EDIT = "edit"
 EVENT_TN5 = "tn5"
 EVENTS = (EVENT_EDIT, EVENT_TN5)
 
-# Tn5 inserts as a dimer that nicks the two strands 9 bp apart, so both
-# fragments flanking one insertion carry the same 9-bp duplication [p, p + 9).
-# A forward read of the right-hand fragment starts at p; a reverse read of the
-# left-hand fragment ends (exclusive) at p + 9. Moving each 4 bp inward from its
-# 5' end -- +4 on reference_start, -5 on the exclusive reference_end -- puts
-# both on p + 4, the centre base of the duplication: the usual +4/-5 shift.
-TN5_SHIFT_FORWARD = 4
-TN5_SHIFT_REVERSE = 5
+# Default Tn5 shifts, signed and in the usual "+4/-5" form: added to
+# reference_start for a forward read, and to the *exclusive* reference_end for a
+# reverse one. Tn5 inserts as a dimer that nicks the two strands 9 bp apart, so
+# both fragments flanking one insertion carry the same 9-bp duplication
+# [p, p + 9): a forward read of the right-hand fragment starts at p, and a
+# reverse read of the left-hand one ends (exclusive) at p + 9. +4 and -5 put both
+# on p + 4, the centre base of the duplication. Raw, unshifted 5' ends are 0 and
+# -1, since a reverse read's 5' base is reference_end - 1.
+DEFAULT_FORWARD_SHIFT = 4
+DEFAULT_REVERSE_SHIFT = -5
 
 
 def _passes_filters(read: pysam.AlignedSegment, min_mapq: int) -> bool:
@@ -51,18 +53,23 @@ def _passes_filters(read: pysam.AlignedSegment, min_mapq: int) -> bool:
     return read.mapping_quality >= min_mapq
 
 
-def _tn5_cut_site(read: pysam.AlignedSegment) -> int | None:
+def _tn5_cut_site(
+    read: pysam.AlignedSegment,
+    forward_shift: int = DEFAULT_FORWARD_SHIFT,
+    reverse_shift: int = DEFAULT_REVERSE_SHIFT,
+) -> int | None:
     """0-based reference position of the Tn5 insertion that made this read.
 
-    That is the read's **5' end**, shifted to the centre of the 9-bp target-site
-    duplication: ``reference_start + 4`` for a forward read, and
-    ``reference_end - 5`` for a reverse one, whose 5' end is its right-most
-    aligned base. See ``TN5_SHIFT_FORWARD`` for the geometry.
+    That is the read's **5' end**, shifted: ``reference_start + forward_shift``
+    for a forward read, and ``reference_end + reverse_shift`` for a reverse one,
+    whose 5' end is its right-most aligned base. The defaults (+4, -5) land on
+    the centre of the 9-bp target-site duplication; see
+    ``DEFAULT_FORWARD_SHIFT`` for the geometry.
     """
     if read.is_reverse:
         end = read.reference_end
-        return None if end is None else end - TN5_SHIFT_REVERSE
-    return read.reference_start + TN5_SHIFT_FORWARD
+        return None if end is None else end + reverse_shift
+    return read.reference_start + forward_shift
 
 
 def _get_cut_count(
@@ -72,6 +79,8 @@ def _get_cut_count(
     end: int,
     extend_size: int,
     min_mapq: int,
+    forward_shift: int = DEFAULT_FORWARD_SHIFT,
+    reverse_shift: int = DEFAULT_REVERSE_SHIFT,
 ) -> np.ndarray:
     """Tally per-base Tn5 cut sites in ``[start, end)``.
 
@@ -91,7 +100,7 @@ def _get_cut_count(
     for read in bam.fetch(reference=chrom, start=start, end=end):
         if not _passes_filters(read, min_mapq):
             continue
-        cut = _tn5_cut_site(read)
+        cut = _tn5_cut_site(read, forward_shift, reverse_shift)
         if cut is None or not start <= cut < end:
             continue
         idx = cut - start
@@ -211,7 +220,7 @@ def _get_edit_count(
 
 def _signal_for_region(
     bam_path: str,
-    fasta_path: str,
+    fasta_path: str | None,
     chrom: str,
     start: int,
     end: int,
@@ -221,6 +230,8 @@ def _signal_for_region(
     extend_size: int,
     min_coverage: int,
     event: str = EVENT_EDIT,
+    forward_shift: int = DEFAULT_FORWARD_SHIFT,
+    reverse_shift: int = DEFAULT_REVERSE_SHIFT,
 ) -> tuple[str, int, int, np.ndarray]:
     """Compute the per-base signal for a single genomic region.
 
@@ -266,6 +277,8 @@ def _signal_for_region(
         extend_size=extend_size,
         min_coverage=min_coverage,
         event=event,
+        forward_shift=forward_shift,
+        reverse_shift=reverse_shift,
     )
     return chrom, start, end, signal
 
@@ -282,10 +295,14 @@ def _region_signal(
     extend_size: int,
     min_coverage: int,
     event: str,
+    forward_shift: int = DEFAULT_FORWARD_SHIFT,
+    reverse_shift: int = DEFAULT_REVERSE_SHIFT,
 ) -> np.ndarray:
     """One region's per-base signal, from handles the caller already opened."""
     if event == EVENT_TN5:
-        return _get_cut_count(bam, chrom, start, end, extend_size, min_mapq)
+        return _get_cut_count(
+            bam, chrom, start, end, extend_size, min_mapq, forward_shift, reverse_shift
+        )
 
     assert fasta is not None  # opened for every edit-mode batch
     edits, coverage = _get_edit_count(
@@ -311,7 +328,7 @@ def _region_signal(
 
 def _signal_for_batch(
     bam_path: str,
-    fasta_path: str,
+    fasta_path: str | None,
     regions: Sequence[tuple[str, int, int]],
     mode: str,
     min_mapq: int,
@@ -319,6 +336,8 @@ def _signal_for_batch(
     extend_size: int,
     min_coverage: int,
     event: str = EVENT_EDIT,
+    forward_shift: int = DEFAULT_FORWARD_SHIFT,
+    reverse_shift: int = DEFAULT_REVERSE_SHIFT,
 ) -> list[tuple[str, int, int, np.ndarray]]:
     """Compute a batch of regions with one BAM (and FASTA) handle between them.
 
@@ -330,7 +349,11 @@ def _signal_for_batch(
     regions (see :func:`_batch_regions`), so successive fetches also land in
     nearby parts of the file. Tn5 batches never open the FASTA.
     """
-    fasta = None if event == EVENT_TN5 else pysam.FastaFile(fasta_path)
+    fasta: pysam.FastaFile | None = None
+    if event != EVENT_TN5:
+        if fasta_path is None:
+            raise ValueError("counting edits needs the reference FASTA (fasta_path)")
+        fasta = pysam.FastaFile(fasta_path)
     try:
         with pysam.AlignmentFile(bam_path, "rb") as bam:
             return [
@@ -350,6 +373,8 @@ def _signal_for_batch(
                         extend_size,
                         min_coverage,
                         event,
+                        forward_shift,
+                        reverse_shift,
                     ),
                 )
                 for chrom, start, end in regions
@@ -398,7 +423,7 @@ def _batch_regions(
 
 def run_bam2bw(
     bam_path: str,
-    fasta_path: str,
+    fasta_path: str | None,
     out_dir: str,
     out_name: str,
     chrom_sizes_path: str | None = None,
@@ -412,6 +437,8 @@ def run_bam2bw(
     normalize: bool = False,
     scale_factor: float = 1_000_000.0,
     event: str = EVENT_EDIT,
+    forward_shift: int | None = None,
+    reverse_shift: int | None = None,
 ) -> None:
     """Convert a BAM file to a per-base BigWig track of deamination signal.
 
@@ -441,9 +468,11 @@ def run_bam2bw(
     ----------
     bam_path : str
         Path to the coordinate-sorted, indexed BAM file.
-    fasta_path : str
+    fasta_path : str or None
         Path to the indexed reference FASTA file
-        (``samtools faidx``-style ``.fai`` required).
+        (``samtools faidx``-style ``.fai`` required). Needed to call edits;
+        with ``event="tn5"`` it may be ``None`` and is never opened, since a
+        cut site depends only on where a read aligns.
     out_dir : str
         Output directory. Created if it does not already exist.
     out_name : str
@@ -489,6 +518,15 @@ def run_bam2bw(
           fragment therefore contributes both of its ends and a single-end
           read its start. ``min_baseq`` does not apply; ``min_mapq``,
           the flag filters, ``extend_size`` and ``normalize`` do.
+    forward_shift, reverse_shift : int, optional
+        Tn5 cut-site shifts, signed: the cut is ``reference_start +
+        forward_shift`` for a forward read and ``reference_end +
+        reverse_shift`` for a reverse one (``reference_end`` is exclusive).
+        Default +4 and -5, which put both reads of one insertion on the centre
+        base of the 9-bp duplication. ``0`` and ``-1`` give raw, unshifted 5'
+        ends; a BAM already shifted +4/-5 upstream wants ``0`` and ``0``. Only
+        used with ``event="tn5"``; setting either with ``event="edit"`` logs a
+        warning and has no effect.
     min_coverage : int, default 1
         Coverage threshold for ratio mode (ignored when ``mode="count"``).
         Positions whose total ACGT coverage is strictly below this value
@@ -533,12 +571,28 @@ def run_bam2bw(
             "mode='ratio' divides edits by coverage and has no meaning for Tn5 "
             "cut sites; use mode='count' with event='tn5'"
         )
+    if event == EVENT_EDIT and fasta_path is None:
+        raise ValueError(
+            "event='edit' needs the reference FASTA to call edits; only "
+            "event='tn5' can run without it"
+        )
+    if event == EVENT_EDIT and (forward_shift is not None or reverse_shift is not None):
+        logger.warning(
+            "--forward_shift/--reverse_shift apply to --event tn5 only; ignored"
+        )
+    forward_shift = DEFAULT_FORWARD_SHIFT if forward_shift is None else forward_shift
+    reverse_shift = DEFAULT_REVERSE_SHIFT if reverse_shift is None else reverse_shift
 
     output_path = os.path.join(out_dir, f"{out_name}.bw")
 
     logger.info(f"Running bam2bw (event={event}, mode={mode})")
     logger.info(f"BAM:   {bam_path}")
-    logger.info(f"FASTA: {fasta_path}")
+    logger.info(f"FASTA: {fasta_path if fasta_path is not None else '(not needed)'}")
+    if event == EVENT_TN5:
+        logger.info(
+            f"Tn5 shifts: forward {forward_shift:+d} on the start, "
+            f"reverse {reverse_shift:+d} on the exclusive end"
+        )
 
     if chrom_sizes_path is not None:
         chrom_sizes = get_chrom_sizes_from_file(chrom_sizes_path)
@@ -593,6 +647,8 @@ def run_bam2bw(
             extend_size=extend_size,
             min_coverage=min_coverage,
             event=event,
+            forward_shift=forward_shift,
+            reverse_shift=reverse_shift,
         )
         for batch in batches
     ]

@@ -171,7 +171,7 @@ shifted cut                   p+4
 
 Moving each read 4 bp inward from its 5′ base — `reference_start + 4` forward,
 `reference_end − 5` reverse, the usual **+4/−5 shift** — puts both reads of one
-insertion on the same base, `p+4`, the centre of the duplication. `min_baseq`
+insertion on the same base, `p+4`, the centre of the duplication. Both shifts are options — `--forward_shift` (default `+4`, added to the start) and `--reverse_shift` (default `−5`, added to the exclusive end) — so a different convention, a pre-shifted BAM (`0`/`0`), or raw 5′ ends (`0`/`−1`) are one flag away. No reference sequence is involved, so `--fasta` is optional in this mode. `min_baseq`
 does not apply (a cut has no base to be of poor quality); the flag filters,
 `min_mapq`, `extend_size` and `normalize` do. `--mode ratio` is edit-only and is
 rejected with `--event tn5`.

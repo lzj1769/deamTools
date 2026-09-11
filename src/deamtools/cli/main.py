@@ -255,7 +255,7 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
             "      --threads 4 --out_dir results --out_name sample_peaks\n"
             "\n"
             "  # Tn5 insertion sites instead of edits (ATAC-style cut track)\n"
-            "  deamtools bam2bw --bam sample.bam --fasta hg38.fa --event tn5 \\\n"
+            "  deamtools bam2bw --bam sample.bam --event tn5 \\\n"
             "      --out_dir results --out_name sample_tn5\n"
             "\n"
             "  # Extend each editing site by 50 bp in both directions\n"
@@ -279,9 +279,12 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     parser.add_argument(
         "--fasta",
-        required=True,
         metavar="FILE",
-        help="Path to the reference FASTA file indexed with 'samtools faidx' (.fai required).",
+        help=(
+            "Reference FASTA indexed with 'samtools faidx' (.fai required). "
+            "Required with --event edit; not needed with --event tn5, since a "
+            "cut site depends only on where a read aligns."
+        ),
     )
     parser.add_argument(
         "--out_dir",
@@ -329,6 +332,29 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
             "(reverse) onto the centre of the 9-bp duplication, so a paired-end "
             "fragment contributes both ends and a single-end read its start. "
             "'tn5' works with --mode count only."
+        ),
+    )
+    parser.add_argument(
+        "--forward_shift",
+        type=int,
+        default=None,
+        metavar="INT",
+        help=(
+            "Tn5 only: shift added to a forward read's start to give its cut "
+            "site. Default: +4."
+        ),
+    )
+    parser.add_argument(
+        "--reverse_shift",
+        type=int,
+        default=None,
+        metavar="INT",
+        help=(
+            "Tn5 only: shift added to a reverse read's alignment end (exclusive) "
+            "to give its cut site. Default: -5. With the defaults both reads of "
+            "one insertion land on the centre of the 9-bp duplication. Use "
+            "--forward_shift 0 --reverse_shift -1 for raw 5' ends, or 0 and 0 "
+            "for a BAM already shifted +4/-5."
         ),
     )
     parser.add_argument(
@@ -1133,6 +1159,13 @@ def _run_align(args: argparse.Namespace) -> int:
 
 
 def _run_bam2bw(args: argparse.Namespace) -> int:
+    if args.event == "edit" and args.fasta is None:
+        print(
+            "deamtools bam2bw: error: --fasta is required with --event edit "
+            "(it is optional only with --event tn5)",
+            file=sys.stderr,
+        )
+        return 2
     _log_invocation(args)
     run_bam2bw(
         bam_path=args.bam,
@@ -1150,6 +1183,8 @@ def _run_bam2bw(args: argparse.Namespace) -> int:
         normalize=args.normalize,
         scale_factor=args.scale_factor,
         event=args.event,
+        forward_shift=args.forward_shift,
+        reverse_shift=args.reverse_shift,
     )
     return 0
 

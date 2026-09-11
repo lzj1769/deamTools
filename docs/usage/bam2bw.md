@@ -15,7 +15,7 @@ deamtools bam2bw --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 | Argument | Description |
 |---|---|
 | `--bam FILE` | Coordinate-sorted BAM file. Must be accompanied by an index (`.bai`). |
-| `--fasta FILE` | Reference FASTA file used during alignment. Must be indexed with `samtools faidx` (`.fai`). |
+| `--fasta FILE` | Reference FASTA file used during alignment. Must be indexed with `samtools faidx` (`.fai`). **Required with `--event edit`** (the default). With `--event tn5` it is optional and never opened, since a cut site depends only on where a read aligns. |
 | `--out_dir DIR` | Output directory. Created automatically if it does not exist. |
 | `--out_name NAME` | Base name (without extension) for the output. The BigWig is written to `<out_dir>/<out_name>.bw`. |
 
@@ -33,6 +33,8 @@ deamtools bam2bw --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 | Argument | Default | Description |
 |---|---|---|
 | `--event {edit,tn5}` | `edit` | What the track counts. `edit`: deamination events (C→T or G→A reference mismatches), per fragment. `tn5`: Tn5 insertion sites — the 5′ end of every passing read, shifted +4 bp (forward) or −5 bp from the exclusive end (reverse) onto the centre of the 9-bp duplication. A paired-end fragment therefore contributes **both** of its ends and a single-end read only its start (for a reverse read, the right end of its alignment). `tn5` works with `--mode count` only; `--min_baseq` does not apply to it. See the *Tn5 cut sites* section of [Algorithm](../algorithm.md). |
+| `--forward_shift INT` | `+4` | `--event tn5` only. Added to a forward read's alignment start to give its cut site. |
+| `--reverse_shift INT` | `−5` | `--event tn5` only. Added to a reverse read's **exclusive** alignment end to give its cut site. With the defaults both reads of one insertion land on the centre of the 9-bp duplication. `--forward_shift 0 --reverse_shift -1` gives raw, unshifted 5′ ends (a reverse read's 5′ base is `end − 1`); `0` and `0` suits a BAM already shifted +4/−5 upstream. Either one set with `--event edit` logs a warning and is ignored. |
 | `--extend_size INT` | `0` | Symmetrically extend each detected deamination site by INT base pairs in both directions before writing to the BigWig. A value of 50 means each event at position *p* contributes signal to [*p*−50, *p*+50]. Implemented as a box-kernel convolution, so the signal at a position equals the number of events within `extend_size` bases. |
 | `--normalize` | *(off)* | In count mode (the default), scale every value by `scale_factor / (genome-wide total count)` so the written track sums to `--scale_factor` — reads/counts-per-million-style normalization that makes samples comparable regardless of editing depth. With `--extend_size 0` this is counts per `scale_factor` edits. Ignored in `--mode ratio`. |
 | `--scale_factor FLOAT` | `1000000` | Target total for `--normalize` (1e6 gives per-million values). |

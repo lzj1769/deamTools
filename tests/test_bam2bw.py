@@ -961,6 +961,133 @@ class TestTn5Cuts:
             )
 
 
+class TestTn5Options:
+    """--fasta is optional for Tn5 cuts; the two shifts are adjustable."""
+
+    LENGTH = 200
+    READ = 30
+
+    def _bam(self, tmp_path):
+        header = {"HD": {"VN": "1.6"}, "SQ": [{"SN": "chr1", "LN": self.LENGTH}]}
+        path = str(tmp_path / "o.bam")
+        tmp = path + ".u.bam"
+        with pysam.AlignmentFile(tmp, "wb", header=header) as bam:
+            bam.write(_make_read("f", "A" * self.READ, 0, 40))
+            bam.write(_make_read("r", "A" * self.READ, 0, 110, is_reverse=True))
+        pysam.sort("-o", path, tmp)
+        os.remove(tmp)
+        pysam.index(path)
+        return path  # forward 5' base 40; reverse 5' base 139, exclusive end 140
+
+    def _cuts(self, bam, **kw):
+        _, _, _, signal = _signal_for_region(
+            bam_path=bam,
+            fasta_path=None,
+            chrom="chr1",
+            start=0,
+            end=self.LENGTH,
+            mode="count",
+            min_mapq=0,
+            min_baseq=0,
+            extend_size=0,
+            min_coverage=0,
+            event="tn5",
+            **kw,
+        )
+        return {int(i) for i in np.nonzero(signal)[0]}
+
+    def test_tn5_needs_no_fasta(self, tmp_path):
+        assert self._cuts(self._bam(tmp_path)) == {44, 135}
+
+    def test_custom_shifts(self, tmp_path):
+        bam = self._bam(tmp_path)
+        assert self._cuts(bam, forward_shift=5, reverse_shift=-6) == {45, 134}
+
+    def test_zero_and_minus_one_give_raw_5_prime_ends(self, tmp_path):
+        bam = self._bam(tmp_path)
+        assert self._cuts(bam, forward_shift=0, reverse_shift=-1) == {40, 139}
+
+    def test_run_bam2bw_without_fasta(self, tmp_path):
+        run_bam2bw(
+            bam_path=self._bam(tmp_path),
+            fasta_path=None,
+            out_dir=str(tmp_path / "o"),
+            out_name="t",
+            min_mapq=0,
+            event="tn5",
+            forward_shift=0,
+            reverse_shift=-1,
+        )
+        with pyBigWig.open(str(tmp_path / "o" / "t.bw")) as bw:
+            values = np.nan_to_num(np.array(bw.values("chr1", 0, self.LENGTH)))
+        assert {int(i) for i in np.nonzero(values)[0]} == {40, 139}
+
+    def test_edit_without_fasta_is_rejected(self, tmp_path):
+        with pytest.raises(ValueError, match="FASTA"):
+            run_bam2bw(
+                bam_path=self._bam(tmp_path),
+                fasta_path=None,
+                out_dir=str(tmp_path),
+                out_name="x",
+                event="edit",
+            )
+
+    def test_shifts_with_edit_warn_and_do_nothing(self, tmp_path, caplog):
+        bam = self._bam(tmp_path)
+        fasta = str(tmp_path / "ref.fa")
+        with open(fasta, "w") as f:
+            f.write(">chr1\n" + "A" * self.LENGTH + "\n")
+        pysam.faidx(fasta)
+        with caplog.at_level("WARNING"):
+            run_bam2bw(
+                bam_path=bam,
+                fasta_path=fasta,
+                out_dir=str(tmp_path / "o"),
+                out_name="e",
+                event="edit",
+                forward_shift=10,
+            )
+        assert "tn5 only" in caplog.text
+
+    def test_cli_tn5_without_fasta(self, tmp_path):
+        from deamtools.cli.main import main
+
+        rc = main(
+            [
+                "bam2bw",
+                "--bam",
+                self._bam(tmp_path),
+                "--event",
+                "tn5",
+                "--min_mapq",
+                "0",
+                "--out_dir",
+                str(tmp_path / "c"),
+                "--out_name",
+                "t",
+            ]
+        )
+        assert rc == 0
+        assert os.path.exists(tmp_path / "c" / "t.bw")
+
+    def test_cli_edit_without_fasta_exits_2(self, tmp_path, capsys):
+        from deamtools.cli.main import main
+
+        rc = main(
+            [
+                "bam2bw",
+                "--bam",
+                self._bam(tmp_path),
+                "--out_dir",
+                str(tmp_path / "c"),
+                "--out_name",
+                "t",
+            ]
+        )
+        assert rc == 2
+        assert "--fasta is required with --event edit" in capsys.readouterr().err
+
+
 # ---------------------------------------------------------------------------
 # Batching: one BAM open per batch of regions
 # ---------------------------------------------------------------------------

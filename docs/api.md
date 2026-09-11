@@ -72,6 +72,8 @@ run_bam2bw(
     normalize: bool = False,
     scale_factor: float = 1_000_000,
     event: str = "edit",   # or "tn5" for Tn5 insertion sites
+    forward_shift: int | None = None,   # tn5: default +4
+    reverse_shift: int | None = None,   # tn5: default -5 (on the exclusive end)
 ) -> None
 ```
 
@@ -79,7 +81,7 @@ Write a per-base BigWig of deamination signal to `<out_dir>/<out_name>.bw`. `mod
 
 Both numerator and denominator are counted **per fragment**: the mates of a pair are merged first, so a reference position both mates cover contributes once rather than twice, and the higher base quality settles a disagreement. They are computed in the same pass over the same fragments and both honour `min_mapq`.
 
-`event="tn5"` counts Tn5 insertion sites instead: each passing read's 5′ end, shifted +4 (forward) / −5 from the exclusive end (reverse), so a paired-end fragment contributes both ends and a single-end read its start. Count mode only.
+`fasta_path` may be `None` with `event="tn5"`. `event="tn5"` counts Tn5 insertion sites instead: each passing read's 5′ end, shifted +4 (forward) / −5 from the exclusive end (reverse), so a paired-end fragment contributes both ends and a single-end read its start. Count mode only.
 
 ## `deamtools.preprocessing.bam2fragment`
 
