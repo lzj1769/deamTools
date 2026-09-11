@@ -111,6 +111,7 @@ run_qc(
     tss_flank: int = 2000,
     plot: bool = True,
     n_reads: int | None = None,
+    logo_scale: str = "bits",   # or "frequency"
 ) -> dict
 ```
 

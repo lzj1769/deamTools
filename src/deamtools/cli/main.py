@@ -249,7 +249,7 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
             "  deamtools bam2bw --bam sample.bam --fasta hg38.fa \\\n"
             "      --out_dir results --out_name sample\n"
             "\n"
-            "  # Region-restricted run with stricter quality filters and 4 threads\n"
+            "  # Region-restricted run with stricter quality filters and 4 workers\n"
             "  deamtools bam2bw --bam sample.bam --fasta hg38.fa \\\n"
             "      --regions peaks.bed --min_mapq 30 --min_baseq 30 \\\n"
             "      --threads 4 --out_dir results --out_name sample_peaks\n"
@@ -390,7 +390,10 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         default=1,
         metavar="INT",
-        help="Number of threads for parallel region processing. Default: %(default)s.",
+        help=(
+            "Number of worker processes; regions are processed in parallel. "
+            "Default: %(default)s."
+        ),
     )
 
     parser.set_defaults(func=_run_bam2bw)
@@ -499,7 +502,10 @@ def _add_bam2fragment_parser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         default=1,
         metavar="INT",
-        help="Number of threads for parallel chromosome processing. Default: %(default)s.",
+        help=(
+            "Number of worker processes; chromosomes are processed in parallel. "
+            "Default: %(default)s."
+        ),
     )
 
     parser.add_argument(
@@ -563,7 +569,7 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
             "  deamtools qc --bam sample.bam --fasta hg38.fa \\\n"
             "      --out_dir results --out_name sample\n"
             "\n"
-            "  # Add TSS enrichment and run on 4 threads\n"
+            "  # Add TSS enrichment and run on 4 worker processes\n"
             "  deamtools qc --bam sample.bam --fasta hg38.fa --tss tss.bed \\\n"
             "      --threads 4 --out_dir results --out_name sample\n"
             "\n"
@@ -665,7 +671,21 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         default=1,
         metavar="INT",
-        help="Number of threads for parallel chromosome processing. Default: %(default)s.",
+        help=(
+            "Number of worker processes; chromosomes are processed in parallel. "
+            "Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
+        "--logo_scale",
+        choices=["bits", "frequency"],
+        default="bits",
+        help=(
+            "Y axis of the deaminase motif logo: 'bits' (information content, "
+            "edited base left out) or 'frequency' (per-base frequency on a 0-1 "
+            "axis, target C drawn at position 0). The counts behind the logo "
+            "go to <out_name>.motif_pfm.csv either way. Default: %(default)s."
+        ),
     )
     parser.add_argument(
         "--no_plot",
@@ -844,7 +864,10 @@ def _add_footprint_parser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         default=1,
         metavar="INT",
-        help="Number of threads (chromosomes scored in parallel). Default: %(default)s.",
+        help=(
+            "Number of worker processes; chromosomes are scored in parallel. "
+            "Default: %(default)s."
+        ),
     )
     parser.add_argument(
         "--seed",
@@ -1143,6 +1166,7 @@ def _run_qc(args: argparse.Namespace) -> int:
         tss_flank=args.tss_flank,
         plot=not args.no_plot,
         n_reads=args.n_reads,
+        logo_scale=args.logo_scale,
     )
     return 0
 

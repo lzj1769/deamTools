@@ -169,7 +169,7 @@ Deaminases have intrinsic flanking-sequence preferences (e.g. DddA strongly pref
 
 ## Parallelism and output
 
-Each chromosome (or region) is processed in its own thread via `concurrent.futures.ThreadPoolExecutor`; BAM and FASTA handles are opened independently per worker (pysam handles are not thread-safe). For BigWig output, regions are sorted into `(chrom, start, end)` order — as required by `pyBigWig` — and only non-zero bases are written (sparse, `span=1`); the header lists every chromosome even if it has no signal.
+Each chromosome (or region) is processed in its own **worker process** (`concurrent.futures.ProcessPoolExecutor`, via `deamtools.utils.run_jobs`); BAM and FASTA handles are opened independently per worker. Processes rather than threads because the per-read loops are pure Python, so a thread pool is serialised by the GIL — `qc --threads 12` on a 3.2 M-record BAM ran at 105% CPU as threads and runs about 6× faster as processes. Results are merged in submission order, not completion order, so the output is bit-for-bit identical whatever the worker count. With `--threads 1` everything runs in the calling process. For BigWig output, regions are sorted into `(chrom, start, end)` order — as required by `pyBigWig` — and only non-zero bases are written (sparse, `span=1`); the header lists every chromosome even if it has no signal.
 
 ## Complexity
 

@@ -22,7 +22,7 @@ deamtools footprint --bigwig FILE --regions FILE --out_dir DIR --out_name NAME [
 | Argument | Default | Description |
 |---|---|---|
 | `--n_shuffles INT` | `1000` | Permutations used to build the footprint p-value null (only computed for sites with a positive score). |
-| `--threads INT` | `1` | Number of threads; chromosomes are scored in parallel. |
+| `--threads INT` | `1` | Number of worker processes; chromosomes are scored in parallel. Results do not depend on the worker count, including with `--seed`. |
 | `--seed INT` | *(unseeded)* | RNG seed for reproducible p-values. |
 | `--log_level LEVEL` | `INFO` | Global flag (before the subcommand): `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 
@@ -65,7 +65,7 @@ deamtools footprint \
     --regions mpbs.bed \
     --out_dir results --out_name footprints
 
-# Reproducible p-values, 8 threads
+# Reproducible p-values, 8 worker processes
 deamtools footprint \
     --bigwig sample.bw \
     --regions mpbs.bed \

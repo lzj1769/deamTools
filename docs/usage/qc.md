@@ -84,13 +84,14 @@ saving meaningful time.
 
 | Argument | Default | Description |
 |---|---|---|
-| `--no_plot` | *(off)* | Skip rendering and embedding the summary figure in the HTML report. The JSON and the HTML (tables and descriptions) are still produced. |
+| `--no_plot` | *(off)* | Skip rendering and embedding the summary figure in the HTML report. The JSON, the CSVs and the HTML (tables and descriptions) are still produced. |
+| `--logo_scale {bits,frequency}` | `bits` | Y axis of the deaminase motif logo. `bits` plots information content with the edited base left out — it is always C and would take the full 2 bits, flattening flanks that rarely reach 0.15. `frequency` plots each base's frequency per offset on a 0–1 axis, with the target C drawn at position 0; it is usually the easier of the two to read for a weakly specific enzyme. |
 
 ### Performance
 
 | Argument | Default | Description |
 |---|---|---|
-| `--threads INT` | `1` | Number of threads for parallel processing. Each thread handles one chromosome independently. |
+| `--threads INT` | `1` | Number of worker processes. Each chromosome is processed independently, so the work spreads across cores. On the 3.2 M-record single-end concurrent ACCESS-ATAC BAM, `--threads 12` takes 33 s against 192 s before the switch from threads to processes. |
 
 ### Global option (before the subcommand)
 
@@ -123,7 +124,7 @@ deamtools qc \
 
 Produces `results/sample.json` and `results/sample.html`.
 
-### Add TSS enrichment and run on multiple threads
+### Add TSS enrichment and run on several worker processes
 
 ```bash
 deamtools qc \
@@ -247,7 +248,7 @@ One deviation from ENCODE is deliberate. ENCODE reaches the insertion site indir
 3. Per-fragment edit-rate distribution (edited / editable)
 4. Fragment-length distribution (paired-end libraries only)
 
-plus the deaminase sequence-motif logo, and — when `--tss` is supplied — the TSS enrichment profile, with the score marked on the curve.
+plus the deaminase sequence-motif logo (in bits or frequency, per `--logo_scale`), and — when `--tss` is supplied — the TSS enrichment profile, with the score marked on the curve.
 
 The numbers behind each plot are written as CSV, whether or not the figures are rendered:
 
@@ -255,9 +256,10 @@ The numbers behind each plot are written as CSV, whether or not the figures are 
 |---|---|---|
 | `<out_name>.edits_per_fragment.csv` | `edits`, `fragments`, `fraction`, `is_overflow` | One row per edit count from 0 to 100. The last row is an **overflow bin** counting every fragment with at least 100 edits, flagged `is_overflow = True`. |
 | `<out_name>.edit_rate_per_fragment.csv` | `bin_start`, `bin_end`, `fragments`, `fraction` | 200 bins of width 0.005. Half-open `[bin_start, bin_end)`, except the last, which also holds a rate of exactly 1. |
+| `<out_name>.motif_pfm.csv` | `position`, `A`, `C`, `G`, `T` | Base **counts** at each offset from the edited base, −5 to +5, in the C→T orientation (G→A events reverse-complemented). Position 0 is the edited base itself, filled in as `C = n_events` because it is always C in that orientation. Either logo can be redrawn from it: `pd.read_csv(path, index_col='position')` is the position × base matrix, and dividing each row by its sum gives the frequency logo. |
 | `<out_name>.tss_enrichment.csv` | `position`, `insertions`, `mean_insertions_per_tss`, `normalized` | Only with `--tss`; columns as described under TSS enrichment above. |
 
-The JSON names each file (`editing.edits_per_fragment_csv`, `edit_rate_per_fragment.histogram_csv`, `tss_enrichment.profile_csv`) rather than repeating the numbers, so there is one copy of each distribution.
+The JSON names each file (`editing.edits_per_fragment_csv`, `edit_rate_per_fragment.histogram_csv`, `motif.pfm_csv`, `tss_enrichment.profile_csv`) rather than repeating the numbers, so there is one copy of each distribution.
 
 The report opens with a table of the run's provenance — sample, library layout, the BAM, FASTA and (if given) TSS BED paths, the deamtools version and the time it was generated.
 
@@ -267,4 +269,4 @@ The report opens with a table of the run's provenance — sample, library layout
 
 **`--tss_flank`** — 2000 bp (default) is the ENCODE window. Changing it changes the background, since that is defined relative to the window edges, so a score computed with a different flank is not comparable to a published one.
 
-**`--threads`** — Parallelism is at the chromosome level; setting `--threads` above the number of chromosomes provides no benefit. The optional TSS-enrichment pass runs separately and is not parallelised.
+**`--threads`** — The number of worker processes. Parallelism is at the chromosome level, so setting `--threads` above the number of chromosomes provides no benefit, and the largest chromosome sets the floor on run time. Each worker holds one chromosome's reference sequence, so memory grows with the worker count. The optional TSS-enrichment pass runs separately and is not parallelised.

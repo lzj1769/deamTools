@@ -57,8 +57,8 @@ import logging
 import os
 from collections import defaultdict
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from functools import partial
 from typing import NamedTuple
 
 import numpy as np
@@ -70,6 +70,7 @@ from deamtools.utils import (
     get_version,
     iter_fragments,
     merge_fragment_bases,
+    run_jobs,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,12 @@ _LAYOUT_PROBE = 10_000  # records read from the start of the file to decide it
 _CSV_EDITS = "edits_per_fragment"
 _CSV_RATE = "edit_rate_per_fragment"
 _CSV_TSS = "tss_enrichment"
+_CSV_MOTIF = "motif_pfm"
+
+# Y axis of the deaminase motif logo.
+LOGO_BITS = "bits"
+LOGO_FREQUENCY = "frequency"
+LOGO_SCALES = (LOGO_BITS, LOGO_FREQUENCY)
 
 
 def _csv_name(out_name: str, kind: str) -> str:
@@ -127,6 +134,10 @@ def _passes_filters(read: pysam.AlignedSegment, min_mapq: int) -> bool:
     ):
         return False
     return read.mapping_quality >= min_mapq
+
+
+def _zero_pair() -> list[int]:
+    return [0, 0]
 
 
 class _Stats:
@@ -158,7 +169,9 @@ class _Stats:
         self.motif_pwm = np.zeros((_MOTIF_WINDOW, 4), dtype=np.int64)
         self.motif_events = 0
         # context -> [edits, opportunities]
-        self.context: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+        # A named factory, not a lambda: _Stats is pickled back from worker
+        # processes, and a lambda default_factory cannot be pickled.
+        self.context: dict[str, list[int]] = defaultdict(_zero_pair)
 
     def update(self, other: _Stats) -> None:
         self.total += other.total
@@ -656,6 +669,7 @@ def _build_metrics(
         "motif": {
             "window": _MOTIF_WINDOW,
             "n_events": stats.motif_events,
+            "pfm_csv": _csv_name(out_name, _CSV_MOTIF),
         },
     }
     # Pair-dependent metrics exist only for a paired-end library. For a
@@ -819,6 +833,33 @@ def _tss_figure_base64(tss: _TssResult) -> str:
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+def _motif_counts_df(pwm: np.ndarray, n_events: int):
+    """The motif as a position x base count matrix, the target cytosine included.
+
+    ``pwm`` is accumulated with the edited base itself left out, so its centre
+    row is all zeros. That position is known, though: every event is centred on
+    a reference C once G->A events are reverse-complemented into the C->T
+    orientation, so the centre row is filled in as ``C = n_events``. Flank rows
+    sum to at most ``n_events`` -- a flank base that is N is not counted.
+
+    Returns a DataFrame indexed by offset from the edited base (``position``,
+    centre 0) with integer columns ``A C G T``: what ``<out_name>.motif_pfm.csv``
+    holds, and what the frequency logo normalises.
+    """
+    import pandas as pd
+
+    window = pwm.shape[0]
+    counts = pd.DataFrame(pwm.astype(np.int64), columns=["A", "C", "G", "T"])
+    counts.index = pd.Index(np.arange(window) - window // 2, name="position")
+    counts.loc[0] = [0, n_events, 0, 0]
+    return counts
+
+
+def _write_motif_csv(path: str, pwm: np.ndarray, n_events: int) -> None:
+    """Write the motif count matrix, the numbers behind the logo."""
+    _motif_counts_df(pwm, n_events).to_csv(path)
+
+
 def _motif_bits_df(pwm: np.ndarray):
     """Convert a per-position A/C/G/T count PWM to information content (bits).
 
@@ -843,8 +884,16 @@ def _motif_bits_df(pwm: np.ndarray):
     return bits
 
 
-def _motif_logo_base64(pwm: np.ndarray) -> str | None:
-    """Render the deaminase motif logo from a count PWM; base64 PNG, or None."""
+def _motif_logo_base64(
+    pwm: np.ndarray, n_events: int = 0, scale: str = LOGO_BITS
+) -> str | None:
+    """Render the deaminase motif logo; base64 PNG, or None if there are no events.
+
+    ``scale="bits"`` plots information content, with the edited base left out:
+    it is always C, so it would carry the full 2 bits and flatten the flanks,
+    which rarely reach 0.15. ``scale="frequency"`` plots each base's frequency
+    at each offset on a 0-1 axis, with the target C drawn at position 0.
+    """
     if pwm.sum() == 0:
         return None
 
@@ -854,14 +903,32 @@ def _motif_logo_base64(pwm: np.ndarray) -> str | None:
     import logomaker  # noqa: E402
     import matplotlib.pyplot as plt  # noqa: E402
 
-    bits = _motif_bits_df(pwm)
-    fig, ax = plt.subplots(figsize=(7, 2.4))
-    logo = logomaker.Logo(bits, ax=ax, baseline_width=0)
-    logo.style_spines(visible=False)
-    logo.style_spines(spines=["left", "bottom"], visible=True)
-    ax.set_xlabel("distance from edited base")
-    ax.set_ylabel("bits")
-    ax.set_title("Deaminase sequence motif")
+    if scale == LOGO_FREQUENCY:
+        counts = _motif_counts_df(pwm, n_events)
+        freq = counts.div(counts.sum(axis=1), axis=0).fillna(0.0)  # count -> freq
+        fig, ax = plt.subplots(figsize=(4, 2.5))
+        logo = logomaker.Logo(
+            freq,
+            ax=ax,
+            color_scheme="classic",  # A green, C blue, G orange, T red
+            show_spines=False,
+        )
+        ax.set_ylabel("Frequency")
+        ax.set_xlabel("Distance from target cytosine")
+        ax.set_ylim(0, 1)
+        ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
+        logo.style_spines(visible=False)
+        logo.style_spines(spines=["left", "bottom"], visible=True, linewidth=0.8)
+        ax.tick_params(labelsize=7)
+    else:
+        bits = _motif_bits_df(pwm)
+        fig, ax = plt.subplots(figsize=(7, 2.4))
+        logo = logomaker.Logo(bits, ax=ax, baseline_width=0)
+        logo.style_spines(visible=False)
+        logo.style_spines(spines=["left", "bottom"], visible=True)
+        ax.set_xlabel("distance from edited base")
+        ax.set_ylabel("bits")
+        ax.set_title("Deaminase sequence motif")
     fig.tight_layout()
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150)
@@ -1057,10 +1124,20 @@ def _render_html(
         "<p class='intro'>Sequence logo of the reference bases flanking edited "
         "cytosines, built directly from the editing events in the BAM "
         f"({_fmt(metrics['motif']['n_events'])} events, "
-        f"{metrics['motif']['window']}-bp window). The edited base itself is "
-        "excluded and G&rarr;A events are reverse-complemented into the "
-        "C&rarr;T orientation, so the logo shows the enzyme's flanking-sequence "
-        "preference (e.g. DddA's <code>TC</code> bias).</p>"
+        f"{metrics['motif']['window']}-bp window). G&rarr;A events are "
+        "reverse-complemented into the C&rarr;T orientation, so the logo shows "
+        "the enzyme's flanking-sequence preference (e.g. DddA's <code>TC</code> "
+        "bias). "
+        + (
+            "The y axis is each base's frequency at each offset; position 0 is "
+            "the target cytosine itself, always C in this orientation. "
+            if metrics["motif"].get("logo_scale") == LOGO_FREQUENCY
+            else "The y axis is information content in bits. The edited base "
+            "itself is left out: it is always C and would take the full 2 bits, "
+            "flattening the flanks. "
+        )
+        + f"The counts behind the logo are in <code>{metrics['motif']['pfm_csv']}"
+        "</code>.</p>"
         f"<img alt='Deaminase motif' src='data:image/png;base64,{motif_b64}'></section>"
         if motif_b64
         else ""
@@ -1256,6 +1333,7 @@ def run_qc(
     tss_flank: int = 2000,
     plot: bool = True,
     n_reads: int | None = None,
+    logo_scale: str = LOGO_BITS,
 ) -> dict:
     """Compute QC metrics for a deaminase chromatin-accessibility BAM.
 
@@ -1288,13 +1366,20 @@ def run_qc(
     min_baseq : int, default 20
         Minimum base quality for a position to count as an editing opportunity.
     threads : int, default 1
-        Number of worker threads for per-chromosome processing.
+        Number of worker processes; chromosomes are processed in parallel.
+        With 1 everything runs in this process.
     tss_flank : int, default 2000
         Half-width (bp) of the window around each TSS for enrichment. The
         ENCODE default is 2000; it is rounded down to a whole number of 10-bp
         bins.
     plot : bool, default True
         Whether to render and embed the summary figure in the HTML report.
+    logo_scale : {"bits", "frequency"}, default "bits"
+        Y axis of the deaminase motif logo. ``"bits"`` plots information
+        content with the edited base left out (it is always C, and would take
+        the full 2 bits); ``"frequency"`` plots each base's frequency per
+        offset on a 0-1 axis with the target C at position 0. The counts behind
+        either are written to ``<out_name>.motif_pfm.csv`` regardless.
     n_reads : int, optional
         Subsample to approximately this many reads instead of using all of
         them, for a faster pass over a large BAM. Fragments are drawn uniformly
@@ -1329,6 +1414,10 @@ def run_qc(
     dict
         The metrics dictionary (also written to ``<out_dir>/<out_name>.json``).
     """
+    if logo_scale not in LOGO_SCALES:
+        raise ValueError(
+            f"logo_scale must be one of {', '.join(LOGO_SCALES)}, got {logo_scale!r}"
+        )
     logger.info("Running qc")
     logger.info(f"BAM:   {bam_path}")
     logger.info(f"FASTA: {fasta_path}")
@@ -1360,24 +1449,23 @@ def run_qc(
                 "using all reads"
             )
 
-    logger.info(f"Processing {len(chroms)} chromosome(s) with {threads} thread(s)")
+    logger.info(f"Processing {len(chroms)} chromosome(s) with {threads} worker(s)")
 
+    jobs = [
+        partial(
+            _process_chrom,
+            bam_path,
+            fasta_path,
+            c,
+            min_mapq,
+            min_baseq,
+            sample_fraction,
+        )
+        for c in chroms
+    ]
     merged = _Stats()
-    with ThreadPoolExecutor(max_workers=threads) as pool:
-        futures = {
-            pool.submit(
-                _process_chrom,
-                bam_path,
-                fasta_path,
-                c,
-                min_mapq,
-                min_baseq,
-                sample_fraction,
-            ): c
-            for c in chroms
-        }
-        for future in as_completed(futures):
-            merged.update(future.result())
+    for chrom_stats in run_jobs(jobs, threads):
+        merged.update(chrom_stats)
 
     logger.info(
         f"  {merged.passing} passing read(s) in {merged.fragments} fragment(s) "
@@ -1400,6 +1488,7 @@ def run_qc(
         "fraction": sample_fraction,
         "reads_in_bam": total_reads,
     }
+    metrics["motif"]["logo_scale"] = logo_scale
 
     # The numbers behind each plot, written whether or not the plots are.
     edits_csv = os.path.join(out_dir, _csv_name(out_name, _CSV_EDITS))
@@ -1415,12 +1504,20 @@ def run_qc(
         logger.info(f"Writing {tss_csv}")
         _write_tss_csv(tss_csv, tss)
 
+    motif_csv = os.path.join(out_dir, _csv_name(out_name, _CSV_MOTIF))
+    logger.info(f"Writing {motif_csv}")
+    _write_motif_csv(motif_csv, merged.motif_pwm, merged.motif_events)
+
     logger.info(f"Writing {json_path}")
     with open(json_path, "w") as f:
         json.dump(metrics, f, indent=2)
 
     img_b64 = _figure_base64(metrics, merged) if plot else None
-    motif_b64 = _motif_logo_base64(merged.motif_pwm) if plot else None
+    motif_b64 = (
+        _motif_logo_base64(merged.motif_pwm, merged.motif_events, logo_scale)
+        if plot
+        else None
+    )
     tss_b64 = _tss_figure_base64(tss) if plot and tss is not None else None
 
     logger.info(f"Writing {html_path}")

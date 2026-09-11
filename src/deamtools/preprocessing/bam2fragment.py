@@ -43,12 +43,12 @@ import logging
 import os
 from collections import defaultdict
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
 from typing import IO
 
 import pysam
 
-from deamtools.utils import get_chrom_sizes_from_bam, merge_fragment_bases
+from deamtools.utils import get_chrom_sizes_from_bam, merge_fragment_bases, run_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -222,33 +222,31 @@ def run_bam2fragment(
     with pysam.AlignmentFile(bam_path, "rb") as bam:
         chrom_sizes = get_chrom_sizes_from_bam(bam)
     chroms = list(chrom_sizes.keys())
-    logger.info(f"Processing {len(chroms)} chromosome(s) with {threads} thread(s)")
+    logger.info(f"Processing {len(chroms)} chromosome(s) with {threads} worker(s)")
 
     os.makedirs(out_dir, exist_ok=True)
     output_path = os.path.join(out_dir, f"{out_name}.tsv" + (".gz" if gzip else ""))
 
     results: dict[str, dict[_FragKey, int]] = {}
-    with ThreadPoolExecutor(max_workers=threads) as pool:
-        futures = {
-            pool.submit(
-                _process_chrom,
-                bam_path,
-                fasta_path,
-                chrom,
-                min_mapq,
-                min_baseq,
-                barcode,
-                barcode_tag,
-            ): chrom
-            for chrom in chroms
-        }
-        for future in as_completed(futures):
-            chrom, counter = future.result()
-            logger.info(
-                f"  {chrom}: {len(counter)} unique fragment signature(s) "
-                f"({sum(counter.values())} total)"
-            )
-            results[chrom] = counter
+    jobs = [
+        partial(
+            _process_chrom,
+            bam_path,
+            fasta_path,
+            chrom,
+            min_mapq,
+            min_baseq,
+            barcode,
+            barcode_tag,
+        )
+        for chrom in chroms
+    ]
+    for chrom, counter in run_jobs(jobs, threads):
+        logger.info(
+            f"  {chrom}: {len(counter)} unique fragment signature(s) "
+            f"({sum(counter.values())} total)"
+        )
+        results[chrom] = counter
 
     logger.info(f"Writing {output_path}")
     with _open_output(output_path) as out:

@@ -55,7 +55,7 @@ Regardless of these thresholds, the following reads are always excluded:
 
 | Argument | Default | Description |
 |---|---|---|
-| `--threads INT` | `1` | Number of threads for parallel processing. Each thread handles one chromosome independently. |
+| `--threads INT` | `1` | Number of worker processes. Each region is processed independently, so the work spreads across cores. |
 
 ### Global option (before the subcommand)
 
@@ -159,4 +159,4 @@ The value at each position is the number of deamination events observed there. I
 
 **`--extend_size`** — Set to 0 (default) for the raw single-base signal. For footprinting or broad accessibility analysis, values of 50–200 bp are typical. The optimal value depends on the expected size of accessible regions in your assay.
 
-**`--threads`** — Parallelism is at the chromosome level. Setting `--threads` above the number of chromosomes provides no benefit. For a human genome run, 8–24 threads is a reasonable range.
+**`--threads`** — The number of worker processes. Parallelism is per region, so setting `--threads` above the number of regions provides no benefit; each worker also holds its region's signal array, so memory grows with the worker count on a whole-genome run. For a human genome, 8–16 is a reasonable range.

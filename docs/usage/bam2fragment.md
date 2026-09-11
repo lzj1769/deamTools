@@ -26,7 +26,7 @@ deamtools bam2fragment --bam FILE --fasta FILE --out_dir DIR --out_name NAME [op
 | `--barcode_tag TAG` | `CB` | BAM tag carrying the cell barcode. |
 | `--min_mapq INT` | `20` | Minimum read mapping quality. |
 | `--min_baseq INT` | `20` | Minimum base quality for a position to count as an editing event. |
-| `--threads INT` | `1` | Threads for parallel per-chromosome processing. |
+| `--threads INT` | `1` | Worker processes for parallel per-chromosome processing. |
 | `--log_level LEVEL` | `INFO` | Global flag (before the subcommand): `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 
 ## Output format

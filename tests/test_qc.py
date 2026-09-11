@@ -4,6 +4,7 @@ import csv
 import json
 import os
 
+import numpy as np
 import pysam
 import pytest
 
@@ -348,6 +349,82 @@ class TestDistributionCsvs:
         for label in ("Sample", "Library", "BAM", "FASTA", "deamtools", "Generated"):
             assert f"<tr><th>{label}</th>" in html
         assert "<th>TSS BED</th>" not in html  # only listed when --tss is given
+
+
+class TestMotif:
+    """The motif's counts go to CSV; the logo's y axis is bits or frequency."""
+
+    # Two C->T edits at pos 4, whose 11-bp window runs past both ends of the
+    # 10-bp reference -- so use a longer reference for these.
+    REF = "AATTCCGGAATTCCGGAATTCCGGAATT"
+
+    def _setup(self, tmp_path):
+        fasta = str(tmp_path / "long.fa")
+        with open(fasta, "w") as f:
+            f.write(f">chr1\n{self.REF}\n")
+        pysam.faidx(fasta)
+        header = {"HD": {"VN": "1.6"}, "SQ": [{"LN": len(self.REF), "SN": "chr1"}]}
+        edited = self.REF[:12] + "T" + self.REF[13:]  # ref[12] is C -> T
+        path = str(tmp_path / "m.bam")
+        tmp = path + ".u.bam"
+        with pysam.AlignmentFile(tmp, "wb", header=header) as bam:
+            for i in range(2):
+                bam.write(_make_read(f"r{i}", edited, 0, is_paired=False))
+        pysam.sort("-o", path, tmp)
+        pysam.index(path)
+        return path, fasta
+
+    def test_pfm_csv_holds_counts_with_the_target_c(self, tmp_path):
+        bam, fasta = self._setup(tmp_path)
+        out = str(tmp_path / "o")
+        m = run_qc(bam, fasta, out, "s", min_mapq=0, min_baseq=0, plot=False)
+        assert m["motif"]["n_events"] == 2
+        assert m["motif"]["pfm_csv"] == "s.motif_pfm.csv"
+        with open(os.path.join(out, m["motif"]["pfm_csv"])) as f:
+            rows = {int(r["position"]): r for r in csv.DictReader(f)}
+        assert sorted(rows) == list(range(-5, 6))
+        # Position 0 is the edited base: always C in the unified orientation.
+        assert [int(rows[0][b]) for b in "ACGT"] == [0, 2, 0, 0]
+        # Each flank row puts both events on the reference base at that offset
+        # from the edit (ref[12]); derived from REF rather than hand-counted.
+        for d in (-5, -4, -3, -2, -1, 1, 2, 3, 4, 5):
+            assert int(rows[d][self.REF[12 + d]]) == 2, d
+        for pos, r in rows.items():
+            assert sum(int(r[b]) for b in "ACGT") == 2, pos
+
+    def test_both_scales_render(self, tmp_path):
+        bam, fasta = self._setup(tmp_path)
+        for scale in ("bits", "frequency"):
+            out = str(tmp_path / scale)
+            m = run_qc(
+                bam,
+                fasta,
+                out,
+                "s",
+                min_mapq=0,
+                min_baseq=0,
+                plot=True,
+                logo_scale=scale,
+            )
+            assert m["motif"]["logo_scale"] == scale
+            html = open(os.path.join(out, "s.html")).read()
+            assert "alt='Deaminase motif'" in html
+            assert "s.motif_pfm.csv" in html
+        freq_html = open(os.path.join(tmp_path / "frequency", "s.html")).read()
+        assert "position 0 is the target cytosine" in freq_html
+
+    def test_frequency_matrix_rows_sum_to_one(self):
+        pwm = np.array([[3, 1, 0, 0], [0, 0, 0, 0], [1, 1, 1, 1]])
+        counts = qc._motif_counts_df(pwm, n_events=4)
+        assert list(counts.index) == [-1, 0, 1]
+        assert list(counts.loc[0]) == [0, 4, 0, 0]
+        freq = counts.div(counts.sum(axis=1), axis=0)
+        assert np.allclose(freq.sum(axis=1), 1.0)
+
+    def test_rejects_an_unknown_scale(self, tmp_path):
+        bam, fasta = self._setup(tmp_path)
+        with pytest.raises(ValueError, match="logo_scale"):
+            run_qc(bam, fasta, str(tmp_path / "o"), "s", logo_scale="percent")
 
 
 class TestLibraryLayout:

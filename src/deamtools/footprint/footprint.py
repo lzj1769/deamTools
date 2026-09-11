@@ -21,10 +21,12 @@ from __future__ import annotations
 
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
 
 import numpy as np
 import pyBigWig
+
+from deamtools.utils import run_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,7 @@ def _score_chrom(
 ) -> tuple[list[str], int]:
     """Score every record on one chromosome; returns BED rows and a skip count.
 
-    Opens its own BigWig handle so it is safe to call from a worker thread.
+    Opens its own BigWig handle so it is safe to run in a worker process.
     """
     rng = np.random.default_rng(seed)
     rows: list[str] = []
@@ -128,7 +130,8 @@ def run_footprint(
         Number of within-window permutations used to build the null
         distribution (only computed for sites with a positive score).
     threads : int, default 1
-        Number of worker threads; chromosomes are scored in parallel.
+        Number of worker processes; chromosomes are scored in parallel.
+        With 1 everything runs in this process.
     seed : int, optional
         Base RNG seed for reproducible p-values (each chromosome gets a derived
         seed). When ``None``, results are non-deterministic.
@@ -150,19 +153,24 @@ def run_footprint(
 
     results: dict[str, list[str]] = {}
     total_skipped = 0
-    with ThreadPoolExecutor(max_workers=threads) as pool:
-        futures = {}
-        for i, (chrom, recs) in enumerate(by_chrom.items()):
-            # Derive a per-chromosome seed so output is reproducible yet the
-            # chromosomes use independent random streams.
-            chrom_seed = None if seed is None else seed + i
-            futures[
-                pool.submit(_score_chrom, bigwig_path, recs, n_shuffles, chrom_seed)
-            ] = chrom
-        for future in as_completed(futures):
-            rows, skipped = future.result()
-            results[futures[future]] = rows
-            total_skipped += skipped
+    # Derive a per-chromosome seed so output is reproducible yet the
+    # chromosomes use independent random streams. The seed depends only on the
+    # chromosome's position in the input, so results do not depend on which
+    # worker runs it or in what order jobs finish.
+    jobs = [
+        partial(
+            _score_chrom,
+            bigwig_path,
+            recs,
+            n_shuffles,
+            None if seed is None else seed + i,
+        )
+        for i, recs in enumerate(by_chrom.values())
+    ]
+    # run_jobs yields in submission order, so results line up with by_chrom.
+    for chrom, (rows, skipped) in zip(by_chrom, run_jobs(jobs, threads), strict=True):
+        results[chrom] = rows
+        total_skipped += skipped
 
     logger.info(f"Writing {output_path}")
     n_written = 0

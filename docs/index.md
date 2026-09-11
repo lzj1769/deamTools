@@ -57,7 +57,7 @@ tracks, per-fragment tables, or QC metrics — at single-base resolution.
   distribution, enzyme context bias, fragment sizes, and ENCODE-style TSS enrichment.
 - **Enzyme-bias diagnostics**, including a deaminase sequence-preference logo built
   directly from the BAM and embedded in the QC report.
-- **Multi-threaded** and **region-restricted** processing for whole-genome or targeted runs.
+- **Multi-process** and **region-restricted** processing for whole-genome or targeted runs.
 
 ## Components
 

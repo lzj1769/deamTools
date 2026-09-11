@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
 
 import numpy as np
 import pyBigWig
@@ -15,6 +15,7 @@ from deamtools.utils import (
     get_chrom_sizes_from_file,
     iter_fragments,
     merge_fragment_bases,
+    run_jobs,
 )
 
 logger = logging.getLogger(__name__)
@@ -158,7 +159,7 @@ def _signal_for_region(
     """Compute the per-base signal for a single genomic region.
 
     Wraps :func:`_get_edit_count` so the result can be dispatched to a
-    worker thread. The returned tuple includes the input coordinates so
+    worker process. The returned tuple includes the input coordinates so
     the orchestrator can assemble outputs in BigWig-sorted order
     independent of completion order.
 
@@ -166,7 +167,7 @@ def _signal_for_region(
     ----------
     bam_path, fasta_path : str
         Paths to the BAM and reference FASTA. Both are opened locally so
-        the function is safe to call from worker threads (pysam handles
+        the function is safe to run in a worker process (pysam handles
         are not thread-safe).
     chrom : str
         Chromosome name.
@@ -287,7 +288,8 @@ def run_bam2bw(
         ``2 * extend_size + 1`` centred on the editing site (clipped to
         the enclosing region). Ignored in ratio mode.
     threads : int, default 1
-        Number of worker threads used to process regions in parallel.
+        Number of worker processes used to process regions in parallel.
+        With 1 everything runs in this process.
     mode : {"count", "ratio"}, default "count"
         Signal to write to the BigWig.
 
@@ -372,31 +374,29 @@ def run_bam2bw(
     chrom_order = {c: i for i, c in enumerate(chrom_sizes)}
     regions.sort(key=lambda r: (chrom_order[r[0]], r[1], r[2]))
 
-    logger.info(f"Processing {len(regions)} region(s) with {threads} thread(s)")
+    logger.info(f"Processing {len(regions)} region(s) with {threads} worker(s)")
 
     os.makedirs(out_dir, exist_ok=True)
 
     results: dict[tuple[str, int, int], np.ndarray] = {}
-    with ThreadPoolExecutor(max_workers=threads) as pool:
-        futures = [
-            pool.submit(
-                _signal_for_region,
-                bam_path=bam_path,
-                fasta_path=fasta_path,
-                chrom=c,
-                start=s,
-                end=e,
-                mode=mode,
-                min_mapq=min_mapq,
-                min_baseq=min_baseq,
-                extend_size=extend_size,
-                min_coverage=min_coverage,
-            )
-            for c, s, e in regions
-        ]
-        for future in as_completed(futures):
-            chrom, start, end, signal = future.result()
-            results[(chrom, start, end)] = signal
+    jobs = [
+        partial(
+            _signal_for_region,
+            bam_path=bam_path,
+            fasta_path=fasta_path,
+            chrom=c,
+            start=s,
+            end=e,
+            mode=mode,
+            min_mapq=min_mapq,
+            min_baseq=min_baseq,
+            extend_size=extend_size,
+            min_coverage=min_coverage,
+        )
+        for c, s, e in regions
+    ]
+    for chrom, start, end, signal in run_jobs(jobs, threads):
+        results[(chrom, start, end)] = signal
 
     norm_factor = 1.0
     if mode == "count":
