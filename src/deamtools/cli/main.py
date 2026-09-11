@@ -254,6 +254,10 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
             "      --regions peaks.bed --min_mapq 30 --min_baseq 30 \\\n"
             "      --threads 4 --out_dir results --out_name sample_peaks\n"
             "\n"
+            "  # Tn5 insertion sites instead of edits (ATAC-style cut track)\n"
+            "  deamtools bam2bw --bam sample.bam --fasta hg38.fa --event tn5 \\\n"
+            "      --out_dir results --out_name sample_tn5\n"
+            "\n"
             "  # Extend each editing site by 50 bp in both directions\n"
             "  deamtools bam2bw --bam sample.bam --fasta hg38.fa \\\n"
             "      --extend_size 50 --out_dir results --out_name sample_extended\n"
@@ -314,6 +318,19 @@ def _add_bam2bw_parser(subparsers: argparse._SubParsersAction) -> None:
     )
 
     # Signal options
+    parser.add_argument(
+        "--event",
+        default="edit",
+        choices=["edit", "tn5"],
+        help=(
+            "What the track counts. 'edit' (default): deamination events, any "
+            "C->T or G->A reference mismatch, per fragment. 'tn5': Tn5 insertion "
+            "sites -- the 5' end of every read, shifted +4 bp (forward) / -5 bp "
+            "(reverse) onto the centre of the 9-bp duplication, so a paired-end "
+            "fragment contributes both ends and a single-end read its start. "
+            "'tn5' works with --mode count only."
+        ),
+    )
     parser.add_argument(
         "--mode",
         default="count",
@@ -1132,6 +1149,7 @@ def _run_bam2bw(args: argparse.Namespace) -> int:
         min_coverage=args.min_coverage,
         normalize=args.normalize,
         scale_factor=args.scale_factor,
+        event=args.event,
     )
     return 0
 

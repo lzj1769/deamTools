@@ -152,6 +152,27 @@ def test_bam2bw_is_identical_with_worker_processes(dataset, tmp_path):
     assert all(np.nansum(tracks[0][c]) > 0 for c in CHROMS)  # signal on every contig
 
 
+def test_bam2bw_tn5_is_identical_with_worker_processes(dataset, tmp_path):
+    tracks = []
+    for workers in (1, 3):
+        out = str(tmp_path / f"w{workers}")
+        run_bam2bw(
+            dataset["bam"],
+            dataset["fasta"],
+            out,
+            "t",
+            min_mapq=0,
+            threads=workers,
+            event="tn5",
+        )
+        with pyBigWig.open(os.path.join(out, "t.bw")) as bw:
+            tracks.append({c: np.array(bw.values(c, 0, LENGTH)) for c in CHROMS})
+    for c in CHROMS:
+        assert np.array_equal(tracks[0][c], tracks[1][c], equal_nan=True)
+    # 40 pairs (two cuts each) + 20 singles per contig, all inside the contig.
+    assert sum(np.nansum(tracks[0][c]) for c in CHROMS) == 3 * (2 * 40 + 20)
+
+
 def test_bam2fragment_is_identical_with_worker_processes(dataset, tmp_path):
     tables = []
     for workers in (1, 3):

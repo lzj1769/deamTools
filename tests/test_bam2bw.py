@@ -2,6 +2,7 @@
 
 import os
 
+import numpy as np
 import pandas as pd
 import pyBigWig
 import pysam
@@ -782,3 +783,176 @@ class TestFragmentMerging:
         reads = [_make_read(f"r{i}", self.EDITED, 0, 0) for i in range(3)]
         bam = _write_bam(str(tmp_path / "s.bam"), reads)
         assert self._signal(bam, fasta_file)[1] == pytest.approx(3.0)
+
+
+# ---------------------------------------------------------------------------
+# Tn5 cut sites (--event tn5)
+# ---------------------------------------------------------------------------
+
+
+class TestTn5Cuts:
+    """--event tn5 counts insertion sites: each read's 5' end, shifted +4/-5.
+
+    The shift puts both reads of one insertion on the same base. Tn5 nicks the
+    two strands 9 bp apart, so the fragments either side of an insertion share a
+    9-bp duplication [p, p + 9): a forward read of the right-hand fragment starts
+    at p, a reverse read of the left-hand one ends (exclusive) at p + 9, and both
+    must land on p + 4.
+    """
+
+    LENGTH = 200
+    READ = 30
+
+    def _bam(self, tmp_path, reads, name="t.bam"):
+        header = {"HD": {"VN": "1.6"}, "SQ": [{"SN": "chr1", "LN": self.LENGTH}]}
+        path = str(tmp_path / name)
+        tmp = path + ".u.bam"
+        with pysam.AlignmentFile(tmp, "wb", header=header) as bam:
+            for r in reads:
+                bam.write(r)
+        pysam.sort("-o", path, tmp)
+        os.remove(tmp)
+        pysam.index(path)
+        return path
+
+    def _fasta(self, tmp_path):
+        path = str(tmp_path / "long.fa")
+        with open(path, "w") as f:
+            f.write(">chr1\n" + "ACGT" * (self.LENGTH // 4) + "\n")
+        pysam.faidx(path)
+        return path
+
+    def _read(
+        self,
+        name,
+        pos,
+        *,
+        reverse=False,
+        mapq=30,
+        baseq=40,
+        flags=0,
+        mate=None,
+        read1=True,
+    ):
+        seq = "A" * self.READ
+        a = _make_read(
+            name,
+            seq,
+            0,
+            pos,
+            mapq=mapq,
+            is_reverse=reverse,
+            baseq=baseq,
+            extra_flags=flags,
+        )
+        if mate is not None:
+            a.flag |= 0x1 | 0x2 | (0x40 if read1 else 0x80)
+            a.next_reference_id, a.next_reference_start = 0, mate
+        return a
+
+    def _cuts(
+        self,
+        tmp_path,
+        reads,
+        *,
+        start=0,
+        end=None,
+        extend_size=0,
+        min_mapq=0,
+        min_baseq=0,
+    ):
+        bam = self._bam(tmp_path, reads)
+        _, _, _, signal = _signal_for_region(
+            bam_path=bam,
+            fasta_path=self._fasta(tmp_path),
+            chrom="chr1",
+            start=start,
+            end=self.LENGTH if end is None else end,
+            mode="count",
+            min_mapq=min_mapq,
+            min_baseq=min_baseq,
+            extend_size=extend_size,
+            min_coverage=0,
+            event="tn5",
+        )
+        return {start + int(i): float(signal[i]) for i in np.nonzero(signal)[0]}
+
+    def test_both_sides_of_one_insertion_land_on_the_same_base(self, tmp_path):
+        p = 100  # the 9-bp duplication is [100, 109)
+        right = self._read("right", p)  # forward, starts at p
+        left = self._read("left", p + 9 - self.READ, reverse=True)  # ends at p+9
+        assert left.reference_end == p + 9
+        assert self._cuts(tmp_path, [right, left]) == {p + 4: 2.0}
+
+    def test_paired_end_fragment_contributes_both_ends(self, tmp_path):
+        # Fragment [40, 140): R1 forward at 40, R2 reverse ending at 140.
+        r1 = self._read("frag", 40, mate=110, read1=True)
+        r2 = self._read("frag", 110, reverse=True, mate=40, read1=False)
+        assert self._cuts(tmp_path, [r1, r2]) == {44: 1.0, 135: 1.0}
+
+    def test_single_end_read_contributes_only_its_start(self, tmp_path):
+        forward = self._read("f", 40)
+        reverse = self._read("r", 110, reverse=True)
+        # A reverse read "starts" at its 5' end: the right end of the alignment,
+        # not the left-most coordinate.
+        assert self._cuts(tmp_path, [forward]) == {44: 1.0}
+        assert self._cuts(tmp_path, [reverse]) == {110 + self.READ - 5: 1.0}
+
+    def test_base_quality_does_not_matter_but_filters_do(self, tmp_path):
+        reads = [
+            self._read("lowq", 40, baseq=2),  # counted: cuts ignore base quality
+            self._read("dup", 60, flags=0x400),  # duplicate: dropped
+            self._read("mapq", 80, mapq=5),  # below --min_mapq: dropped
+        ]
+        assert self._cuts(tmp_path, reads, min_mapq=20, min_baseq=30) == {44: 1.0}
+
+    def test_cut_outside_the_region_is_not_counted(self, tmp_path):
+        # Read overlaps [50, 100) but its cut (44) lies before it.
+        assert self._cuts(tmp_path, [self._read("f", 40)], start=50, end=100) == {}
+
+    def test_extend_size_broadcasts_each_cut(self, tmp_path):
+        cuts = self._cuts(tmp_path, [self._read("f", 40)], extend_size=2)
+        assert cuts == {42: 1.0, 43: 1.0, 44: 1.0, 45: 1.0, 46: 1.0}
+
+    def test_run_bam2bw_writes_a_cut_track(self, tmp_path):
+        bam = self._bam(
+            tmp_path,
+            [
+                self._read("frag", 40, mate=110, read1=True),
+                self._read("frag", 110, reverse=True, mate=40, read1=False),
+            ],
+        )
+        run_bam2bw(
+            bam_path=bam,
+            fasta_path=self._fasta(tmp_path),
+            out_dir=str(tmp_path / "o"),
+            out_name="tn5",
+            min_mapq=0,
+            event="tn5",
+        )
+        with pyBigWig.open(str(tmp_path / "o" / "tn5.bw")) as bw:
+            values = np.nan_to_num(np.array(bw.values("chr1", 0, self.LENGTH)))
+        assert {int(i) for i in np.nonzero(values)[0]} == {44, 135}
+
+    def test_ratio_mode_is_rejected(self, tmp_path):
+        bam = self._bam(tmp_path, [self._read("f", 40)])
+        with pytest.raises(ValueError, match="ratio"):
+            run_bam2bw(
+                bam_path=bam,
+                fasta_path=self._fasta(tmp_path),
+                out_dir=str(tmp_path),
+                out_name="x",
+                mode="ratio",
+                event="tn5",
+            )
+
+    def test_unknown_event_is_rejected(self, tmp_path):
+        bam = self._bam(tmp_path, [self._read("f", 40)])
+        with pytest.raises(ValueError, match="event"):
+            run_bam2bw(
+                bam_path=bam,
+                fasta_path=self._fasta(tmp_path),
+                out_dir=str(tmp_path),
+                out_name="x",
+                event="cuts",
+            )

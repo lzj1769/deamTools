@@ -71,12 +71,15 @@ run_bam2bw(
     min_coverage: int = 10,
     normalize: bool = False,
     scale_factor: float = 1_000_000,
+    event: str = "edit",   # or "tn5" for Tn5 insertion sites
 ) -> None
 ```
 
 Write a per-base BigWig of deamination signal to `<out_dir>/<out_name>.bw`. `mode="count"` writes raw edit counts (strand-agnostic `C→T` or `G→A`) and honours `extend_size`; `mode="ratio"` writes `edits / total_ACGT_coverage`, masking positions below `min_coverage` to 0. In count mode, `normalize=True` scales every value by `scale_factor / total` so the track sums to `scale_factor` (reads/counts-per-million); ignored in ratio mode.
 
 Both numerator and denominator are counted **per fragment**: the mates of a pair are merged first, so a reference position both mates cover contributes once rather than twice, and the higher base quality settles a disagreement. They are computed in the same pass over the same fragments and both honour `min_mapq`.
+
+`event="tn5"` counts Tn5 insertion sites instead: each passing read's 5′ end, shifted +4 (forward) / −5 from the exclusive end (reverse), so a paired-end fragment contributes both ends and a single-end read its start. Count mode only.
 
 ## `deamtools.preprocessing.bam2fragment`
 

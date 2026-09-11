@@ -147,6 +147,44 @@ Records whose mate never arrives — unpaired reads, a mate that was unmapped, f
 
 `bam2fragment` has always worked per fragment, and now shares the same merging helper.
 
+## Tn5 cut sites (`bam2bw --event tn5`)
+
+Deaminase libraries such as ACCESS-ATAC are tagmented with Tn5, so each fragment
+end also marks a Tn5 insertion — the ATAC-style accessibility signal. With
+`--event tn5`, `bam2bw` counts those insertion sites instead of edits.
+
+Each passing read contributes the insertion at its **5′ end**. For paired-end data
+the two mates' 5′ ends are the two ends of the fragment, so every fragment gives
+two cuts; for single-end data each read gives the one cut it was sequenced from.
+A reverse read's 5′ end is the right end of its alignment, not its left-most
+coordinate.
+
+Tn5 inserts as a dimer that nicks the two strands 9 bp apart, so the fragments on
+either side of one insertion share a 9-bp duplication `[p, p+9)`:
+
+```
+reference            ......[p ....... p+8]......
+right fragment, fwd       [p ─────────────────▶        5′ base = p
+left fragment, rev   ◀────────────── p+8]              5′ base = p+8  (reference_end = p+9)
+shifted cut                   p+4
+```
+
+Moving each read 4 bp inward from its 5′ base — `reference_start + 4` forward,
+`reference_end − 5` reverse, the usual **+4/−5 shift** — puts both reads of one
+insertion on the same base, `p+4`, the centre of the duplication. `min_baseq`
+does not apply (a cut has no base to be of poor quality); the flag filters,
+`min_mapq`, `extend_size` and `normalize` do. `--mode ratio` is edit-only and is
+rejected with `--event tn5`.
+
+The geometry can be checked on real data by cross-correlating forward and reverse
+5′ bases: pairs from one insertion should sit at an offset of +8. On the Ultima
+single-end concurrent ACCESS-ATAC BAM they do, strongly (5.7× background at +8
+against 2.4× at +9). On the Illumina paired-end `HepG2.bam` there is a second
+population of similar size at +9 (2.3× at +8, 2.6× at +9), for which the shifted
+cuts land 1 bp apart. It is not soft-clipping (excluding clipped 5′ ends changes
+nothing) and not an extra non-genomic 5′ base (the first base's mismatch rate is
+0.28%, no higher than the next); its origin is not yet known.
+
 ## Signal generation (`bam2bw`)
 
 For each region (whole chromosome or a merged BED interval) the reference is fetched once and reads are streamed via the BAM index.

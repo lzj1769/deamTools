@@ -1,6 +1,6 @@
 # bam2bw
 
-Convert a coordinate-sorted BAM file to a BigWig track of per-base C→T deamination counts.
+Convert a coordinate-sorted BAM file to a BigWig track of per-base deamination counts — or, with `--event tn5`, of Tn5 insertion (cut) sites.
 
 Signal is counted **per fragment**, not per alignment record: for paired-end data the two mates are merged before counting, so a reference position that both mates cover contributes once instead of twice, and the higher base quality settles a disagreement between them. In `--mode ratio` the denominator is counted the same way, in the same pass, and honours `--min_mapq`. See [Algorithm](../algorithm.md#mates-are-merged-before-counting) for why this matters — on real ACCESS-ATAC data the mate overlap was 21% of the count-mode signal.
 
@@ -32,6 +32,7 @@ deamtools bam2bw --bam FILE --fasta FILE --out_dir DIR --out_name NAME [options]
 
 | Argument | Default | Description |
 |---|---|---|
+| `--event {edit,tn5}` | `edit` | What the track counts. `edit`: deamination events (C→T or G→A reference mismatches), per fragment. `tn5`: Tn5 insertion sites — the 5′ end of every passing read, shifted +4 bp (forward) or −5 bp from the exclusive end (reverse) onto the centre of the 9-bp duplication. A paired-end fragment therefore contributes **both** of its ends and a single-end read only its start (for a reverse read, the right end of its alignment). `tn5` works with `--mode count` only; `--min_baseq` does not apply to it. See the *Tn5 cut sites* section of [Algorithm](../algorithm.md). |
 | `--extend_size INT` | `0` | Symmetrically extend each detected deamination site by INT base pairs in both directions before writing to the BigWig. A value of 50 means each event at position *p* contributes signal to [*p*−50, *p*+50]. Implemented as a box-kernel convolution, so the signal at a position equals the number of events within `extend_size` bases. |
 | `--normalize` | *(off)* | In count mode (the default), scale every value by `scale_factor / (genome-wide total count)` so the written track sums to `--scale_factor` — reads/counts-per-million-style normalization that makes samples comparable regardless of editing depth. With `--extend_size 0` this is counts per `scale_factor` edits. Ignored in `--mode ratio`. |
 | `--scale_factor FLOAT` | `1000000` | Target total for `--normalize` (1e6 gives per-million values). |
