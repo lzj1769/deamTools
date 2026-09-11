@@ -58,7 +58,7 @@ from deamtools.preprocessing.bam2bw import run_bam2bw
 
 run_bam2bw(
     bam_path: str,
-    fasta_path: str,
+    fasta_path: str | None,   # required for event="edit"
     out_dir: str,
     out_name: str,
     chrom_sizes_path: str | None = None,
