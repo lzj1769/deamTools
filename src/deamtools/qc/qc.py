@@ -24,7 +24,9 @@ metrics most useful for judging a deaminase footprinting experiment:
   orientation. This is
   the enzyme's sequence-preference fingerprint (e.g. DddA's ``TC`` preference).
 * **Fragment-length distribution** — from the template length of properly-paired
-  read pairs.
+  read pairs. Paired-end only: the library layout is detected from the head of
+  the BAM (:func:`_detect_layout`), and for a single-end library this block and
+  the proper-pair metrics are omitted rather than reported as zero.
 * **Deaminase sequence motif** — a sequence logo of the reference bases flanking
   edited cytosines, built directly from the editing events (centre excluded,
   ``G->A`` events reverse-complemented to the ``C->T`` orientation). Shows the
@@ -88,6 +90,11 @@ _BASE_IDX = {"A": 0, "C": 1, "G": 2, "T": 3}
 
 # Fixed so that subsampled QC runs are reproducible without another CLI flag.
 _SAMPLE_KEY = b"deamtools-qc-20260910"
+
+# Library layout, decided from the head of the BAM before the main pass.
+LAYOUT_PAIRED = "paired-end"
+LAYOUT_SINGLE = "single-end"
+_LAYOUT_PROBE = 10_000  # records read from the start of the file to decide it
 
 
 def _revcomp(seq: str) -> str:
@@ -263,6 +270,26 @@ def _accumulate_fragment(
         stats.edit_rate_hist[bin_idx] += 1
         stats.edit_rate_sum += rate
         stats.edit_rate_n += 1
+
+
+def _detect_layout(bam_path: str, n: int = _LAYOUT_PROBE) -> str:
+    """Is this a paired-end or a single-end library? Decided from ``n`` records.
+
+    Paired-end if any of the first ``n`` records carries the paired flag
+    (0x1). One is enough in both directions: a single-end library never sets
+    it, and a paired-end library sets it on essentially every record --
+    unmapped reads and orphans included, so it does not matter what sorts to
+    the top of the file. The records are read from the start of the file
+    rather than through the index, so unplaced reads are seen too.
+
+    An empty BAM is reported as single-end, which only means that no
+    pair-dependent metric is produced for it.
+    """
+    with pysam.AlignmentFile(bam_path, "rb") as bam:
+        for read in bam.head(n):
+            if read.is_paired:
+                return LAYOUT_PAIRED
+    return LAYOUT_SINGLE
 
 
 def _process_chrom(
@@ -506,6 +533,7 @@ def _build_metrics(
     stats: _Stats,
     tss: _TssResult | None,
     tss_csv_name: str | None,
+    layout: str = LAYOUT_PAIRED,
 ) -> dict:
     edit_rate = (
         stats.total_edits / stats.total_opportunities
@@ -536,6 +564,7 @@ def _build_metrics(
     }
 
     metrics: dict = {
+        "library_layout": layout,
         "reads": {
             "total": stats.total,
             "passing": stats.passing,
@@ -544,10 +573,6 @@ def _build_metrics(
             "duplicate_rate": (stats.duplicate / stats.total if stats.total else 0.0),
             "secondary": stats.secondary,
             "supplementary": stats.supplementary,
-            "proper_pair": stats.proper_pair,
-            "proper_pair_rate": (
-                stats.proper_pair / stats.passing if stats.passing else 0.0
-            ),
         },
         "fragments": {
             "total": stats.fragments,
@@ -571,16 +596,25 @@ def _build_metrics(
             "bin_edges": [round(i / _RATE_BINS, 4) for i in range(_RATE_BINS + 1)],
         },
         "context": context,
-        "fragment_length": {
-            "mean": fraglen["mean"],
-            "median": fraglen["median"],
-            "n_pairs": fraglen["n"],
-        },
         "motif": {
             "window": _MOTIF_WINDOW,
             "n_events": stats.motif_events,
         },
     }
+    # Pair-dependent metrics exist only for a paired-end library. For a
+    # single-end one they are left out rather than reported as 0: a
+    # proper-pair rate of 0 reads as a mapping failure, and a mean fragment
+    # length of 0 bp is not a length at all -- there is no insert to measure.
+    if layout == LAYOUT_PAIRED:
+        metrics["reads"]["proper_pair"] = stats.proper_pair
+        metrics["reads"]["proper_pair_rate"] = (
+            stats.proper_pair / stats.passing if stats.passing else 0.0
+        )
+        metrics["fragment_length"] = {
+            "mean": fraglen["mean"],
+            "median": fraglen["median"],
+            "n_pairs": fraglen["n"],
+        }
     if tss is not None:
         # The profile itself is not duplicated here: it is a few hundred numbers
         # and its one home is the CSV, named below so the JSON still points at it.
@@ -604,7 +638,9 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
     import matplotlib.pyplot as plt
     from matplotlib.ticker import NullLocator, ScalarFormatter
 
-    n_panels = 4
+    # The fragment-length panel only exists for a paired-end library.
+    paired = metrics.get("library_layout", LAYOUT_PAIRED) == LAYOUT_PAIRED
+    n_panels = 4 if paired else 3
     # One panel per row so each plot is large and readable in the report.
     fig, axes = plt.subplots(n_panels, 1, figsize=(9, 3.4 * n_panels))
 
@@ -625,8 +661,14 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
     # Panel 2: edits per fragment (raw count).
     hist = stats.edits_per_fragment
     axes[1].bar(np.arange(len(hist)), hist, color="#2c7fb8")
+    # Trim the axis to the data: the histogram runs to _MAX_EDITS, but real
+    # fragments rarely come near it, which would squeeze the bars to the left.
+    # The overflow bin is the last one, so it stays in view whenever it is used.
+    occupied = np.nonzero(hist)[0]
+    if occupied.size:
+        axes[1].set_xlim(-0.5, int(occupied[-1]) + 1.5)
     axes[1].set_xlabel("edits per fragment")
-    axes[1].set_ylabel("reads")
+    axes[1].set_ylabel("fragments")
     axes[1].set_title("Edits per fragment")
 
     # Panel 3: per-fragment edit rate (edited C/G over editable C/G). Most sit
@@ -643,17 +685,18 @@ def _figure_base64(metrics: dict, stats: _Stats) -> str:
     axes[2].xaxis.set_major_formatter(ScalarFormatter())
     axes[2].xaxis.set_minor_locator(NullLocator())
     axes[2].set_xlabel("edit rate per fragment")
-    axes[2].set_ylabel("reads")
+    axes[2].set_ylabel("fragments")
     axes[2].set_title(
         f"Per-fragment edit rate (mean {metrics['edit_rate_per_fragment']['mean']:.3f})"
     )
 
-    # Panel 4: fragment length.
-    fl = stats.fraglen
-    axes[3].plot(np.arange(len(fl)), fl, color="#31a354")
-    axes[3].set_xlabel("fragment length (bp)")
-    axes[3].set_ylabel("pairs")
-    axes[3].set_title("Fragment length")
+    # Panel 4: fragment length (paired-end only).
+    if paired:
+        fl = stats.fraglen
+        axes[3].plot(np.arange(len(fl)), fl, color="#31a354")
+        axes[3].set_xlabel("fragment length (bp)")
+        axes[3].set_ylabel("pairs")
+        axes[3].set_title("Fragment length")
 
     fig.tight_layout()
     buf = io.BytesIO()
@@ -1015,13 +1058,23 @@ def _render_html(
                 if k not in ("histogram", "bin_edges")
             },
         ),
-        _html_section(
-            "Fragment length",
-            "Insert-size distribution from properly-paired reads.",
-            "fragment_length",
-            metrics["fragment_length"],
-        ),
     ]
+    if "fragment_length" in metrics:
+        sections.append(
+            _html_section(
+                "Fragment length",
+                "Insert-size distribution from properly-paired reads.",
+                "fragment_length",
+                metrics["fragment_length"],
+            )
+        )
+    else:
+        sections.append(
+            "<section><h2>Fragment length</h2><p class='intro'>Not applicable: "
+            "this is a single-end library, so there is no insert size to "
+            "measure. The proper-pair count and rate are left out of the read "
+            "statistics for the same reason.</p></section>"
+        )
     if "tss_enrichment" in metrics:
         sections.append(
             _html_section(
@@ -1093,7 +1146,8 @@ def _render_html(
         "<title>DeamTools QC Report</title>"
         f"<style>{style}</style></head><body><div class='container'>"
         "<h1>DeamTools QC Report</h1>"
-        f"<p class='meta'>Sample: <b>{out_name}</b> &middot; Generated "
+        f"<p class='meta'>Sample: <b>{out_name}</b> &middot; Library: "
+        f"<b>{metrics.get('library_layout', LAYOUT_PAIRED)}</b> &middot; Generated "
         f"{generated}<br>BAM: <code>{bam_path}</code><br>"
         f"FASTA: <code>{fasta_path}</code></p>"
         f"<div class='cards'>{cards_html}</div>"
@@ -1198,6 +1252,11 @@ def run_qc(
         total_reads = sum(st.mapped + st.unmapped for st in bam.get_index_statistics())
     chroms = list(chrom_sizes.keys())
 
+    layout = _detect_layout(bam_path)
+    logger.info(
+        f"Library layout: {layout} (from the first {_LAYOUT_PROBE:,} record(s))"
+    )
+
     sample_fraction = 1.0
     if n_reads is not None:
         if n_reads <= 0:
@@ -1249,7 +1308,7 @@ def run_qc(
     html_path = os.path.join(out_dir, f"{out_name}.html")
     tss_csv_name = f"{out_name}.tss_enrichment.csv" if tss is not None else None
 
-    metrics = _build_metrics(merged, tss, tss_csv_name)
+    metrics = _build_metrics(merged, tss, tss_csv_name, layout)
     metrics["sampling"] = {
         "subsampled": sample_fraction < 1.0,
         "requested_reads": n_reads,

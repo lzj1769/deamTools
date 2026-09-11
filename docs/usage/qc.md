@@ -56,10 +56,13 @@ deamtools qc --bam sample.bam --fasta hg38.fa \
 ```
 
 The sampling fraction is `n_reads / (reads in the BAM)`, read straight from the
-BAM index, so nothing is scanned twice. Each read is kept independently with
-that probability, which makes the sample uniform across the genome rather than
-biased toward the first chromosomes. The draw is seeded, so rerunning the same
-command samples the same reads.
+BAM index, so nothing is scanned twice. Each **fragment** is kept independently
+with that probability, which makes the sample uniform across the genome rather
+than biased toward the first chromosomes. The draw is keyed on the read name, so
+both mates of a pair always share their fragment's fate — drawing the two mates
+separately would leave most kept fragments with only one mate and roughly halve
+every per-fragment edit count. The draw is seeded, so rerunning the same command
+samples the same fragments.
 
 **The draw is blind to what a read contains.** The coin is flipped before the
 read is examined, so a read carrying no editing event is kept at exactly the
@@ -147,9 +150,15 @@ deamtools qc \
 
 ## Metrics
 
+### Library layout (`library_layout`)
+
+Before the main pass, `qc` reads the first 10,000 records of the BAM and calls the library **`paired-end`** if any of them carries the paired flag (`0x1`), otherwise **`single-end`**. One record is enough either way: a single-end library never sets the flag, and a paired-end one sets it on essentially every record, unmapped reads and orphans included. The layout is shown in the report header and recorded at the top of the JSON.
+
+For a **single-end** library the pair-dependent metrics are **left out** rather than reported as zero — `proper_pair`, `proper_pair_rate`, and the whole `fragment_length` block, along with its panel in the summary figure. A proper-pair rate of 0 would read as a mapping failure, and a fragment length of 0 bp is not a length; neither applies when there are no pairs. Everything else — editing, context, motif, TSS enrichment — is computed identically for both layouts, since each single-end read is simply a fragment of one record.
+
 ### Read statistics (`reads`)
 
-Counts of `total`, `passing`, `unmapped`, `duplicate`, `secondary`, `supplementary`, and `proper_pair` reads, plus `duplicate_rate` (over total reads) and `proper_pair_rate` (over passing reads). A low passing fraction or a high duplicate rate points to library-complexity problems.
+Counts of `total`, `passing`, `unmapped`, `duplicate`, `secondary`, and `supplementary` reads plus `duplicate_rate` (over total reads); for a paired-end library also `proper_pair` and `proper_pair_rate` (over passing reads). A low passing fraction or a high duplicate rate points to library-complexity problems.
 
 ### Fragments (`fragments`)
 
@@ -201,7 +210,7 @@ This complements `mean_edits_per_fragment`: the raw count scales with fragment l
 
 For each cytosine-centred trinucleotide (e.g. `TCG`, `ACA`), the number of `edits`, `opportunities`, and the resulting `edit_fraction`. `G→A` events are reverse-complemented into the unified `C→T` orientation, so both strands are reported together. This is the enzyme's **sequence-preference fingerprint** — for example, DddA strongly prefers `TC` contexts, while relaxed-bias enzymes such as DddSs/SsdAtox edit more uniformly across contexts. A strongly skewed profile means downstream footprinting will benefit from enzyme-bias correction.
 
-### Fragment-length distribution (`fragment_length`)
+### Fragment-length distribution (`fragment_length`, paired-end only)
 
 `mean`, `median`, and `n_pairs`, computed from `abs(template_length)` of properly-paired read 1 (so each pair is counted once). For an ATAC-style library this should show the characteristic nucleosome-laddering periodicity in the PNG panel.
 
@@ -236,7 +245,7 @@ One deviation from ENCODE is deliberate. ENCODE reaches the insertion site indir
 1. Trinucleotide context edit fraction (enzyme fingerprint)
 2. Edits-per-fragment histogram (raw count)
 3. Per-fragment edit-rate distribution (edited / editable)
-4. Fragment-length distribution
+4. Fragment-length distribution (paired-end libraries only)
 
 plus the deaminase sequence-motif logo, and — when `--tss` is supplied — the TSS enrichment profile, with the score marked on the curve.
 

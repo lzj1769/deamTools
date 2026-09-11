@@ -283,6 +283,115 @@ class TestQC:
         assert "Trinucleotide context bias" in html
 
 
+class TestLibraryLayout:
+    """Pair-dependent metrics are reported only for a paired-end library.
+
+    A single-end BAM has no insert size and no pairs, so a proper-pair rate of 0
+    or a fragment length of 0 bp would read as a failure rather than as "does
+    not apply". The layout is decided from the head of the file before the main
+    pass.
+    """
+
+    EDITED = "ACGTTGATCG"  # one C->T at pos 4
+
+    def _single(self, tmp_path, n=3):
+        reads = [_make_read(f"r{i}", self.EDITED, 0, is_paired=False) for i in range(n)]
+        return _write_bam(str(tmp_path / "se.bam"), reads)
+
+    def _paired(self, tmp_path):
+        reads = [
+            _make_read(
+                "p",
+                self.EDITED,
+                0,
+                is_read1=True,
+                mate_pos=0,
+                mate_reverse=True,
+                template_length=10,
+            ),
+            _make_read(
+                "p",
+                self.EDITED,
+                0,
+                is_read1=False,
+                is_reverse=True,
+                mate_pos=0,
+                template_length=-10,
+            ),
+        ]
+        return _write_bam(str(tmp_path / "pe.bam"), reads)
+
+    def test_detects_single_end(self, tmp_path):
+        assert qc._detect_layout(self._single(tmp_path)) == qc.LAYOUT_SINGLE
+
+    def test_detects_paired_end(self, tmp_path):
+        assert qc._detect_layout(self._paired(tmp_path)) == qc.LAYOUT_PAIRED
+
+    def test_one_paired_record_makes_the_library_paired(self, tmp_path):
+        reads = [_make_read(f"s{i}", REF_SEQ, 0, is_paired=False) for i in range(5)]
+        reads.append(_make_read("p", REF_SEQ, 0, mate_pos=0))
+        bam = _write_bam(str(tmp_path / "mixed.bam"), reads)
+        assert qc._detect_layout(bam) == qc.LAYOUT_PAIRED
+
+    def test_empty_bam_is_single_end(self, tmp_path):
+        bam = _write_bam(str(tmp_path / "empty.bam"), [])
+        assert qc._detect_layout(bam) == qc.LAYOUT_SINGLE
+
+    def test_single_end_omits_pair_metrics(self, tmp_path, fasta_file):
+        m = run_qc(
+            self._single(tmp_path),
+            fasta_file,
+            str(tmp_path / "o"),
+            "se",
+            min_mapq=0,
+            min_baseq=0,
+            plot=False,
+        )
+        assert m["library_layout"] == "single-end"
+        assert "proper_pair" not in m["reads"]
+        assert "proper_pair_rate" not in m["reads"]
+        assert "fragment_length" not in m
+        # Everything that does apply is still there.
+        assert m["reads"]["passing"] == 3
+        assert m["fragments"]["total"] == 3
+        assert m["editing"]["total_edits"] == 3
+
+    def test_paired_end_keeps_pair_metrics(self, tmp_path, fasta_file):
+        m = run_qc(
+            self._paired(tmp_path),
+            fasta_file,
+            str(tmp_path / "o"),
+            "pe",
+            min_mapq=0,
+            min_baseq=0,
+            plot=False,
+        )
+        assert m["library_layout"] == "paired-end"
+        assert m["reads"]["proper_pair"] == 2
+        assert m["reads"]["proper_pair_rate"] == pytest.approx(1.0)
+        assert m["fragment_length"]["n_pairs"] == 1
+
+    def test_single_end_report_says_not_applicable(self, tmp_path, fasta_file):
+        out = str(tmp_path / "o")
+        run_qc(
+            self._single(tmp_path),
+            fasta_file,
+            out,
+            "se",
+            min_mapq=0,
+            min_baseq=0,
+            plot=True,
+        )
+        html = open(os.path.join(out, "se.html")).read()
+        assert "single-end" in html
+        assert "proper_pair_rate" not in html
+        assert "Not applicable" in html
+        # The JSON on disk matches what run_qc returned.
+        on_disk = json.load(open(os.path.join(out, "se.json")))
+        assert on_disk["library_layout"] == "single-end"
+        assert "fragment_length" not in on_disk
+
+
 class TestFragmentMerging:
     """Editing is counted per fragment: overlapping mates are one observation.
 
