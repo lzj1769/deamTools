@@ -885,7 +885,7 @@ def _motif_bits_df(pwm: np.ndarray):
 
 
 def _motif_logo_base64(
-    pwm: np.ndarray, n_events: int = 0, scale: str = LOGO_BITS
+    pwm: np.ndarray, n_events: int = 0, scale: str = LOGO_FREQUENCY
 ) -> str | None:
     """Render the deaminase motif logo; base64 PNG, or None if there are no events.
 
@@ -1333,7 +1333,7 @@ def run_qc(
     tss_flank: int = 2000,
     plot: bool = True,
     n_reads: int | None = None,
-    logo_scale: str = LOGO_BITS,
+    logo_scale: str = LOGO_FREQUENCY,
 ) -> dict:
     """Compute QC metrics for a deaminase chromatin-accessibility BAM.
 
@@ -1374,12 +1374,15 @@ def run_qc(
         bins.
     plot : bool, default True
         Whether to render and embed the summary figure in the HTML report.
-    logo_scale : {"bits", "frequency"}, default "bits"
-        Y axis of the deaminase motif logo. ``"bits"`` plots information
-        content with the edited base left out (it is always C, and would take
-        the full 2 bits); ``"frequency"`` plots each base's frequency per
-        offset on a 0-1 axis with the target C at position 0. The counts behind
-        either are written to ``<out_name>.motif_pfm.csv`` regardless.
+    logo_scale : {"frequency", "bits"}, default "frequency"
+        Y axis of the deaminase motif logo. ``"frequency"`` plots each base's
+        frequency per offset on a 0-1 axis with the target C at position 0.
+        ``"bits"`` plots information content with the edited base left out (it
+        is always C, and would take the full 2 bits); it is the more standard
+        logo, but a deaminase's preference is weak -- the flanks stay under
+        ~0.15 bits -- so the letters come out barely legible, which is why
+        frequency is the default. The counts behind either are written to
+        ``<out_name>.motif_pfm.csv`` regardless.
     n_reads : int, optional
         Subsample to approximately this many reads instead of using all of
         them, for a faster pass over a large BAM. Fragments are drawn uniformly

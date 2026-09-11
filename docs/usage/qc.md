@@ -85,7 +85,7 @@ saving meaningful time.
 | Argument | Default | Description |
 |---|---|---|
 | `--no_plot` | *(off)* | Skip rendering and embedding the summary figure in the HTML report. The JSON, the CSVs and the HTML (tables and descriptions) are still produced. |
-| `--logo_scale {bits,frequency}` | `bits` | Y axis of the deaminase motif logo. `bits` plots information content with the edited base left out — it is always C and would take the full 2 bits, flattening flanks that rarely reach 0.15. `frequency` plots each base's frequency per offset on a 0–1 axis, with the target C drawn at position 0; it is usually the easier of the two to read for a weakly specific enzyme. |
+| `--logo_scale {frequency,bits}` | `frequency` | Y axis of the deaminase motif logo. `frequency` plots each base's frequency per offset on a 0–1 axis, with the target C drawn at position 0. `bits` plots information content with the edited base left out — it is always C and would take the full 2 bits. Bits is the more conventional logo, but a deaminase's flanking preference is weak (the flanks rarely reach 0.15 bits), so its letters come out barely legible; that is why `frequency` is the default. |
 
 ### Performance
 

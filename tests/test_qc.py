@@ -421,6 +421,13 @@ class TestMotif:
         freq = counts.div(counts.sum(axis=1), axis=0)
         assert np.allclose(freq.sum(axis=1), 1.0)
 
+    def test_default_scale_is_frequency(self, tmp_path):
+        bam, fasta = self._setup(tmp_path)
+        m = run_qc(
+            bam, fasta, str(tmp_path / "o"), "s", min_mapq=0, min_baseq=0, plot=False
+        )
+        assert m["motif"]["logo_scale"] == "frequency"
+
     def test_rejects_an_unknown_scale(self, tmp_path):
         bam, fasta = self._setup(tmp_path)
         with pytest.raises(ValueError, match="logo_scale"):

@@ -678,13 +678,14 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     parser.add_argument(
         "--logo_scale",
-        choices=["bits", "frequency"],
-        default="bits",
+        choices=["frequency", "bits"],
+        default="frequency",
         help=(
-            "Y axis of the deaminase motif logo: 'bits' (information content, "
-            "edited base left out) or 'frequency' (per-base frequency on a 0-1 "
-            "axis, target C drawn at position 0). The counts behind the logo "
-            "go to <out_name>.motif_pfm.csv either way. Default: %(default)s."
+            "Y axis of the deaminase motif logo: 'frequency' (per-base "
+            "frequency on a 0-1 axis, target C drawn at position 0) or 'bits' "
+            "(information content, edited base left out). The counts behind "
+            "the logo go to <out_name>.motif_pfm.csv either way. "
+            "Default: %(default)s."
         ),
     )
     parser.add_argument(
