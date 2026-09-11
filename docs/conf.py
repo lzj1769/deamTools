@@ -15,7 +15,7 @@ copyright = "2026, Zhijian Li"
 try:
     release = _pkg_version("deamtools")
 except PackageNotFoundError:
-    release = "0.1.1"
+    release = "0.1.2"
 version = release
 
 # -- General configuration ----------------------------------------------------
