@@ -2,6 +2,15 @@
 
 Every subcommand is a thin wrapper around a public `run_*` function, so DeamTools can be used as a Python library as well as from the command line. Each function is importable from its submodule.
 
+```{note}
+With `threads > 1`, `run_bam2bw`, `run_bam2fragment`, `run_qc` and `run_footprint` run their work in **worker processes**. On macOS, where Python starts workers by re-importing your script, keep the call under the usual guard:
+
+    if __name__ == "__main__":
+        run_qc(..., threads=8)
+
+Without it each worker re-runs the script, and Python stops with a `RuntimeError` about the bootstrapping phase. Jupyter notebooks need no guard. Code piped in on stdin (`python -`) cannot be re-imported at all, so the work runs in a single process there, with a warning.
+```
+
 ## `deamtools.align.index`
 
 ### `run_index`

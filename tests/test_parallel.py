@@ -195,3 +195,30 @@ def test_footprint_is_identical_with_worker_processes(dataset, tmp_path):
         results.append(open(os.path.join(out, "fp.bed")).read())
     assert results[0] == results[1]
     assert len(results[0].splitlines()) == 15
+
+
+class TestUnimportableMain:
+    """A program read from stdin cannot be re-imported by spawned workers."""
+
+    def test_falls_back_to_in_process(self, monkeypatch, caplog):
+        import multiprocessing
+        import sys
+        import types
+
+        fake_main = types.ModuleType("__main__")
+        fake_main.__file__ = "<stdin>"  # what Python records for `python -`
+        fake_main.__spec__ = None
+        monkeypatch.setitem(sys.modules, "__main__", fake_main)
+        monkeypatch.setattr(
+            multiprocessing, "get_start_method", lambda allow_none=False: "spawn"
+        )
+        jobs = [partial(pow, 2, i) for i in range(4)]
+        with caplog.at_level("WARNING"):
+            assert list(run_jobs(jobs, 4)) == [1, 2, 4, 8]
+        assert "read from stdin" in caplog.text
+
+    def test_real_main_still_uses_the_pool(self, monkeypatch):
+        from deamtools.utils import parallel
+
+        # Under pytest __main__ is a real file (or a -m module), so no fallback.
+        assert parallel._workers_can_start()
