@@ -1,0 +1,434 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>seq2edit &mdash; DeamTools</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=a7ae4c86" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=360bc84d"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Algorithm" href="../algorithm.html" />
+    <link rel="prev" title="footprint" href="footprint.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            DeamTools
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#install-deamtools">Install DeamTools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#python-dependencies">Python dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#verify-installation">Verify installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html#running-tests">Running tests</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Commands</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="index.html">index</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="index.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#arguments">Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="index.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="align.html">align</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="align.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="align.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="bam2bw.html">bam2bw</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2bw.html#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="bam2fragment.html">bam2fragment</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#output-format">Output format</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bam2fragment.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="qc.html">qc</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#output-control">Output control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#metrics">Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="qc.html#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="match.html">match</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="match.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="match.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="footprint.html">footprint</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="footprint.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">seq2edit</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../algorithm.html">Algorithm</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#biological-basis">Biological basis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#strand-convention">Strand convention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#deamination-aware-alignment-index-align">Deamination-aware alignment (<code class="docutils literal notranslate"><span class="pre">index</span></code> + <code class="docutils literal notranslate"><span class="pre">align</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#edit-detection-conventions">Edit detection conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#tn5-cut-sites-bam2bw-event-tn5">Tn5 cut sites (<code class="docutils literal notranslate"><span class="pre">bam2bw</span> <span class="pre">--event</span> <span class="pre">tn5</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#signal-generation-bam2bw">Signal generation (<code class="docutils literal notranslate"><span class="pre">bam2bw</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#enzyme-sequence-bias">Enzyme sequence bias</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#parallelism-and-output">Parallelism and output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithm.html#complexity">Complexity</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-align-index"><code class="docutils literal notranslate"><span class="pre">deamtools.align.index</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-align-align"><code class="docutils literal notranslate"><span class="pre">deamtools.align.align</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-preprocessing-bam2bw"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2bw</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-preprocessing-bam2fragment"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2fragment</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-qc"><code class="docutils literal notranslate"><span class="pre">deamtools.qc</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-motif-match"><code class="docutils literal notranslate"><span class="pre">deamtools.motif.match</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-footprint"><code class="docutils literal notranslate"><span class="pre">deamtools.footprint</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api.html#deamtools-utils"><code class="docutils literal notranslate"><span class="pre">deamtools.utils</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">DeamTools</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">seq2edit</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/usage/seq2edit.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="seq2edit">
+<h1>seq2edit<a class="headerlink" href="#seq2edit" title="Link to this heading"></a></h1>
+<p>Model the <strong>deaminase sequence bias</strong> by learning a map from DNA sequence to
+per-base editing signal. A deaminase does not edit every accessible cytosine
+equally — it has a sequence preference (e.g. DddA’s <code class="docutils literal notranslate"><span class="pre">TC</span></code> context). <code class="docutils literal notranslate"><span class="pre">seq2edit</span></code>
+trains a convolutional neural network to predict, for a window of one-hot DNA,
+the editing each base <em>would</em> receive on the basis of sequence alone. Trained on
+a naked/deproteinised-DNA control, this gives an <strong>expected</strong> track that
+downstream footprint and occupancy analyses can divide out to separate enzyme
+bias from genuine protein protection.</p>
+<p>The design follows the ACCESS-ATAC
+<a class="reference external" href="https://github.com/pinellolab/ACCESS-ATAC/tree/main/cnn_bias_model"><code class="docutils literal notranslate"><span class="pre">cnn_bias_model</span></code></a>.</p>
+<p>The module has three stages — <strong>train</strong> (implemented here), <strong>predict</strong>, and
+<strong>interpret</strong> (planned). This page documents <code class="docutils literal notranslate"><span class="pre">seq2edit</span> <span class="pre">train</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">seq2edit</span></code> needs the optional <strong>PyTorch</strong> dependency, which is not installed by
+default:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">'deamtools[seq2edit]'</span>
+</pre></div>
+</div>
+<p>The data-preparation helpers work without it; only model training/inference
+require <code class="docutils literal notranslate"><span class="pre">torch</span></code>.</p>
+</div>
+<section id="synopsis">
+<h2>Synopsis<a class="headerlink" href="#synopsis" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">deamtools</span> <span class="n">seq2edit</span> <span class="n">train</span> <span class="o">--</span><span class="n">fasta</span> <span class="n">FILE</span> <span class="o">--</span><span class="n">bigwig</span> <span class="n">FILE</span> <span class="o">--</span><span class="n">train_regions</span> <span class="n">FILE</span> \
+    <span class="o">--</span><span class="n">out_dir</span> <span class="n">DIR</span> <span class="o">--</span><span class="n">out_name</span> <span class="n">NAME</span> <span class="p">[</span><span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="required-inputs">
+<h2>Required inputs<a class="headerlink" href="#required-inputs" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--fasta</span> <span class="pre">FILE</span></code></p></td>
+<td><p>Reference FASTA indexed with <code class="docutils literal notranslate"><span class="pre">samtools</span> <span class="pre">faidx</span></code> (<code class="docutils literal notranslate"><span class="pre">.fai</span></code> required). Source of the input sequence.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--bigwig</span> <span class="pre">FILE</span></code></p></td>
+<td><p>Per-base editing-signal BigWig (the regression target), e.g. from <a class="reference internal" href="bam2bw.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">deamtools</span> <span class="pre">bam2bw</span></code></span></a>. Use a <strong>naked/deproteinised-DNA</strong> control so the model learns enzyme bias rather than chromatin state.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--train_regions</span> <span class="pre">FILE</span></code></p></td>
+<td><p>BED of regions tiled into training windows.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--out_dir</span> <span class="pre">DIR</span></code></p></td>
+<td><p>Output directory. Created automatically if it does not exist.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--out_name</span> <span class="pre">NAME</span></code></p></td>
+<td><p>Base name for the checkpoint. Writes <code class="docutils literal notranslate"><span class="pre">&lt;out_dir&gt;/&lt;out_name&gt;.pth</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="optional-arguments">
+<h2>Optional arguments<a class="headerlink" href="#optional-arguments" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Argument</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--valid_regions</span> <span class="pre">FILE</span></code></p></td>
+<td><p><em>(hold-out split)</em></p></td>
+<td><p>BED of validation regions. If omitted, a random <code class="docutils literal notranslate"><span class="pre">--valid_fraction</span></code> of the training windows is held out.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--valid_fraction</span> <span class="pre">FLOAT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.1</span></code></p></td>
+<td><p>Hold-out fraction used when <code class="docutils literal notranslate"><span class="pre">--valid_regions</span></code> is not given.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--seq_len</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">128</span></code></p></td>
+<td><p>Window width in bp — the model’s input and output length.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--step</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--seq_len</span></code></p></td>
+<td><p>Spacing between window starts. Use a smaller value to oversample with overlapping windows.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--n_filters</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">32</span></code></p></td>
+<td><p>Convolutional filters per conv block.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--kernel_size</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">5</span></code></p></td>
+<td><p>Convolution kernel width.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--epochs</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">200</span></code></p></td>
+<td><p>Number of training epochs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--batch_size</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">512</span></code></p></td>
+<td><p>Mini-batch size.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--lr</span> <span class="pre">FLOAT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">3e-4</span></code></p></td>
+<td><p>Adam learning rate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--weight_decay</span> <span class="pre">FLOAT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1e-4</span></code></p></td>
+<td><p>Adam weight decay (L2).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--num_workers</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0</span></code></p></td>
+<td><p>DataLoader worker processes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--seed</span> <span class="pre">INT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">42</span></code></p></td>
+<td><p>RNG seed for reproducibility.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">STR</span></code></p></td>
+<td><p><em>(auto)</em></p></td>
+<td><p>Compute device (<code class="docutils literal notranslate"><span class="pre">cpu</span></code>, <code class="docutils literal notranslate"><span class="pre">cuda</span></code>, <code class="docutils literal notranslate"><span class="pre">mps</span></code>). Auto-detects CUDA, then Apple MPS, then CPU.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--log_level</span> <span class="pre">LEVEL</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">INFO</span></code></p></td>
+<td><p>Global flag (before the subcommand): <code class="docutils literal notranslate"><span class="pre">DEBUG</span></code>, <code class="docutils literal notranslate"><span class="pre">INFO</span></code>, <code class="docutils literal notranslate"><span class="pre">WARNING</span></code>, <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="how-it-works">
+<h2>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading"></a></h2>
+<p><strong>Windowing.</strong> Each interval in <code class="docutils literal notranslate"><span class="pre">--train_regions</span></code> is tiled into non-overlapping
+<code class="docutils literal notranslate"><span class="pre">--seq_len</span></code>-wide windows (a trailing stretch shorter than <code class="docutils literal notranslate"><span class="pre">seq_len</span></code> is dropped).
+For every window:</p>
+<ul class="simple">
+<li><p>the reference sequence is one-hot encoded as the input <code class="docutils literal notranslate"><span class="pre">x</span></code> of shape
+<code class="docutils literal notranslate"><span class="pre">(seq_len,</span> <span class="pre">4)</span></code> with column order <code class="docutils literal notranslate"><span class="pre">A,</span> <span class="pre">C,</span> <span class="pre">G,</span> <span class="pre">T</span></code> (non-<code class="docutils literal notranslate"><span class="pre">ACGT</span></code> bases such as <code class="docutils literal notranslate"><span class="pre">N</span></code>
+become an all-zero row); and</p></li>
+<li><p>the per-base <code class="docutils literal notranslate"><span class="pre">--bigwig</span></code> signal over the same coordinates is the target <code class="docutils literal notranslate"><span class="pre">y</span></code> of
+shape <code class="docutils literal notranslate"><span class="pre">(seq_len,)</span></code> (uncovered <code class="docutils literal notranslate"><span class="pre">NaN</span></code> bases are read as <code class="docutils literal notranslate"><span class="pre">0</span></code>).</p></li>
+</ul>
+<p><strong>Model (<code class="docutils literal notranslate"><span class="pre">EditNet</span></code>).</strong> Two <code class="docutils literal notranslate"><span class="pre">Conv1d</span> <span class="pre">→</span> <span class="pre">ReLU</span> <span class="pre">→</span> <span class="pre">MaxPool</span> <span class="pre">→</span> <span class="pre">Dropout</span></code> blocks feed a
+fully-connected head that regresses the per-base editing vector for the window,
+with a final <code class="docutils literal notranslate"><span class="pre">Softplus</span></code> so the output is a strictly positive rate <code class="docutils literal notranslate"><span class="pre">λ</span></code> — the mean
+of a Poisson over per-base edit counts:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>one-hot (seq_len, 4)
+   → conv block 1 (n_filters, kernel_size)
+   → conv block 2 (n_filters, kernel_size)
+   → flatten → FC(1024) → FC(1024) → FC(seq_len) → Softplus
+   → predicted per-base editing rate λ (seq_len,)
+</pre></div>
+</div>
+<p>The flattened size feeding the first dense layer is derived from the
+architecture, so non-default <code class="docutils literal notranslate"><span class="pre">--seq_len</span></code>/<code class="docutils literal notranslate"><span class="pre">--n_filters</span></code>/<code class="docutils literal notranslate"><span class="pre">--kernel_size</span></code> work
+without code changes (the upstream reference hard-codes it for the <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">/</span> <span class="pre">32</span> <span class="pre">/</span> <span class="pre">5</span></code>
+defaults).</p>
+<p><strong>Optimisation.</strong> Editing signal is count-like, so the model is fit with a
+<strong>Poisson</strong> negative-log-likelihood loss (<code class="docutils literal notranslate"><span class="pre">PoissonNLLLoss</span></code>, on the predicted
+rate <code class="docutils literal notranslate"><span class="pre">λ</span></code>) rather than MSE — it maximises the Poisson likelihood of the observed
+per-base counts. Adam (<code class="docutils literal notranslate"><span class="pre">--lr</span></code> <code class="docutils literal notranslate"><span class="pre">3e-4</span></code>, <code class="docutils literal notranslate"><span class="pre">--weight_decay</span></code> <code class="docutils literal notranslate"><span class="pre">1e-4</span></code>) with a
+<code class="docutils literal notranslate"><span class="pre">ReduceLROnPlateau</span></code> schedule (patience 10, floor <code class="docutils literal notranslate"><span class="pre">1e-5</span></code>) on the validation loss.
+Each epoch reports train/validation loss and the current learning rate; the
+checkpoint is rewritten whenever the validation loss improves.</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&lt;out_dir&gt;/&lt;out_name&gt;.pth</span></code></p></td>
+<td><p>Best-validation checkpoint: model weights (<code class="docutils literal notranslate"><span class="pre">model_state_dict</span></code>), the <code class="docutils literal notranslate"><span class="pre">config</span></code> needed to rebuild the network (<code class="docutils literal notranslate"><span class="pre">seq_len</span></code>, <code class="docutils literal notranslate"><span class="pre">n_filters</span></code>, <code class="docutils literal notranslate"><span class="pre">kernel_size</span></code>), the per-epoch <code class="docutils literal notranslate"><span class="pre">train_losses</span></code>/<code class="docutils literal notranslate"><span class="pre">valid_losses</span></code>, and <code class="docutils literal notranslate"><span class="pre">best_epoch</span></code>/<code class="docutils literal notranslate"><span class="pre">best_valid_loss</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Train on naked-DNA editing signal over a set of regions</span>
+deamtools<span class="w"> </span>seq2edit<span class="w"> </span>train<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fasta<span class="w"> </span>hg38.fa<span class="w"> </span>--bigwig<span class="w"> </span>naked.bw<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--train_regions<span class="w"> </span>regions.bed<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>models<span class="w"> </span>--out_name<span class="w"> </span>bias
+
+<span class="c1"># Explicit validation regions, larger windows, fewer epochs, on GPU</span>
+deamtools<span class="w"> </span>seq2edit<span class="w"> </span>train<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fasta<span class="w"> </span>hg38.fa<span class="w"> </span>--bigwig<span class="w"> </span>naked.bw<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--train_regions<span class="w"> </span>train.bed<span class="w"> </span>--valid_regions<span class="w"> </span>valid.bed<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--seq_len<span class="w"> </span><span class="m">128</span><span class="w"> </span>--epochs<span class="w"> </span><span class="m">50</span><span class="w"> </span>--device<span class="w"> </span>cuda<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out_dir<span class="w"> </span>models<span class="w"> </span>--out_name<span class="w"> </span>bias
+</pre></div>
+</div>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>The <code class="docutils literal notranslate"><span class="pre">--bigwig</span></code> target should come from a control where editing reflects
+<strong>sequence preference</strong>, not chromatin state — typically naked or
+deproteinised DNA — otherwise the model conflates enzyme bias with
+accessibility.</p></li>
+<li><p>Windows are tiled, so making <code class="docutils literal notranslate"><span class="pre">--train_regions</span></code> broad (e.g. many peaks or a
+whole chromosome) gives the model more examples; <code class="docutils literal notranslate"><span class="pre">--step</span></code> smaller than
+<code class="docutils literal notranslate"><span class="pre">--seq_len</span></code> adds overlapping windows for additional coverage.</p></li>
+<li><p>The saved <code class="docutils literal notranslate"><span class="pre">config</span></code> lets later <code class="docutils literal notranslate"><span class="pre">predict</span></code>/<code class="docutils literal notranslate"><span class="pre">interpret</span></code> stages rebuild the exact
+network from the checkpoint.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="footprint.html" class="btn btn-neutral float-left" title="footprint" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../algorithm.html" class="btn btn-neutral float-right" title="Algorithm" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Zhijian Li.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

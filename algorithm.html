@@ -1,0 +1,446 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Algorithm &mdash; DeamTools</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=a7ae4c86" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=360bc84d"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API reference" href="api.html" />
+    <link rel="prev" title="seq2edit" href="usage/seq2edit.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            DeamTools
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#install-deamtools">Install DeamTools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#python-dependencies">Python dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#verify-installation">Verify installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#running-tests">Running tests</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Commands</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage/index.html">index</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage/index.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/index.html#arguments">Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/index.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/index.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/index.html#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/index.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/index.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage/align.html">align</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage/align.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/align.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/align.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/align.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/align.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/align.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/align.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage/bam2bw.html">bam2bw</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2bw.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2bw.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2bw.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2bw.html#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2bw.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2bw.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2bw.html#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage/bam2fragment.html">bam2fragment</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2fragment.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2fragment.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2fragment.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2fragment.html#output-format">Output format</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2fragment.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/bam2fragment.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage/qc.html">qc</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage/qc.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/qc.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/qc.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/qc.html#output-control">Output control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/qc.html#input-file-preparation">Input file preparation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/qc.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/qc.html#metrics">Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/qc.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/qc.html#choosing-parameters">Choosing parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage/match.html">match</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage/match.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/match.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/match.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/match.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/match.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/match.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/match.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/match.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage/footprint.html">footprint</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage/footprint.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/footprint.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/footprint.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/footprint.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/footprint.html#output">Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/footprint.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/footprint.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage/seq2edit.html">seq2edit</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage/seq2edit.html#synopsis">Synopsis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/seq2edit.html#required-inputs">Required inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/seq2edit.html#optional-arguments">Optional arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/seq2edit.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/seq2edit.html#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/seq2edit.html#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage/seq2edit.html#notes">Notes</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Algorithm</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#biological-basis">Biological basis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#strand-convention">Strand convention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deamination-aware-alignment-index-align">Deamination-aware alignment (<code class="docutils literal notranslate"><span class="pre">index</span></code> + <code class="docutils literal notranslate"><span class="pre">align</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#edit-detection-conventions">Edit detection conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tn5-cut-sites-bam2bw-event-tn5">Tn5 cut sites (<code class="docutils literal notranslate"><span class="pre">bam2bw</span> <span class="pre">--event</span> <span class="pre">tn5</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#signal-generation-bam2bw">Signal generation (<code class="docutils literal notranslate"><span class="pre">bam2bw</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#enzyme-sequence-bias">Enzyme sequence bias</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#parallelism-and-output">Parallelism and output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#complexity">Complexity</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api.html#deamtools-align-index"><code class="docutils literal notranslate"><span class="pre">deamtools.align.index</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#deamtools-align-align"><code class="docutils literal notranslate"><span class="pre">deamtools.align.align</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#deamtools-preprocessing-bam2bw"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2bw</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#deamtools-preprocessing-bam2fragment"><code class="docutils literal notranslate"><span class="pre">deamtools.preprocessing.bam2fragment</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#deamtools-qc"><code class="docutils literal notranslate"><span class="pre">deamtools.qc</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#deamtools-motif-match"><code class="docutils literal notranslate"><span class="pre">deamtools.motif.match</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#deamtools-footprint"><code class="docutils literal notranslate"><span class="pre">deamtools.footprint</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#deamtools-utils"><code class="docutils literal notranslate"><span class="pre">deamtools.utils</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">DeamTools</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Algorithm</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/algorithm.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="algorithm">
+<h1>Algorithm<a class="headerlink" href="#algorithm" title="Link to this heading"></a></h1>
+<p>This page describes how DeamTools aligns deaminated reads and detects, quantifies, and summarises deamination events.</p>
+<section id="biological-basis">
+<h2>Biological basis<a class="headerlink" href="#biological-basis" title="Link to this heading"></a></h2>
+<p>Double-stranded DNA cytosine deaminases convert cytosine (C) to uracil (U) on DNA that is not shielded by nucleosomes or bound proteins. Accessible chromatin is therefore edited at a high rate, while protein-bound DNA is protected, leaving <strong>footprints</strong>. After PCR (which reads U as T) and sequencing, a deaminated cytosine appears as a C→T substitution relative to the reference; on the opposite strand the same event appears as G→A.</p>
+<p>The signal is a mismatch: the reference carries C (or G), but the aligned read carries T (or A). The density of these mismatches reports accessibility, and local depletions reveal bound factors.</p>
+</section>
+<section id="strand-convention">
+<h2>Strand convention<a class="headerlink" href="#strand-convention" title="Link to this heading"></a></h2>
+<p>The two mismatch patterns say <strong>which strand of the molecule was deaminated</strong> — not which way the observing read happened to align.</p>
+<p><strong>Top-strand event.</strong> A C on the plus strand is deaminated:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Reference (+):  5'—...C...—3'
+                       ↓ deamination
+Molecule (+):   5'—...T...—3'
+</pre></div>
+</div>
+<p>Pattern: <code class="docutils literal notranslate"><span class="pre">ref_base</span> <span class="pre">==</span> <span class="pre">'C'</span></code> and <code class="docutils literal notranslate"><span class="pre">read_base</span> <span class="pre">==</span> <span class="pre">'T'</span></code>.</p>
+<p><strong>Bottom-strand event.</strong> A C on the minus strand is deaminated. That C pairs with a reference G, so in reference coordinates the event shows up at a G:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Reference (+):  5'—...G...—3'
+Template (−):   3'—...C...—5'  ← deaminated here
+</pre></div>
+</div>
+<p>Pattern: <code class="docutils literal notranslate"><span class="pre">ref_base</span> <span class="pre">==</span> <span class="pre">'G'</span></code> and <code class="docutils literal notranslate"><span class="pre">read_base</span> <span class="pre">==</span> <span class="pre">'A'</span></code>.</p>
+<p><strong>Read orientation does not select between them.</strong> Two facts make <code class="docutils literal notranslate"><span class="pre">is_reverse</span></code> the wrong test:</p>
+<ol class="arabic simple">
+<li><p>A BAM stores <code class="docutils literal notranslate"><span class="pre">SEQ</span></code> in <strong>reference orientation</strong> — a reverse-strand record has already been reverse-complemented — so both patterns are expressed against the plus strand regardless of how the read aligned.</p></li>
+<li><p>Library prep fixes the deaminated U into a real <strong>T:A</strong> base pair, so after amplification <em>both</em> strands of the molecule carry the substitution and any read covering the position reports it.</p></li>
+</ol>
+<p>A double-stranded deaminase edits both strands, so one fragment routinely carries both patterns at different positions. Every command therefore calls both patterns on every read. Measured on <code class="docutils literal notranslate"><span class="pre">data/ACCESS-ATAC/chr10.bam</span></code>, <code class="docutils literal notranslate"><span class="pre">is_reverse</span></code> predicts a read’s dominant edit direction only about <strong>65%</strong> of the time; filtering on it discarded <strong>35.5%</strong> of editing events — events carrying the same <code class="docutils literal notranslate"><span class="pre">TC</span></code> enzyme-motif fingerprint as the ones kept, so genuine deamination rather than noise. <code class="docutils literal notranslate"><span class="pre">bam2fragment</span></code> used such a filter until 2026-09-10.</p>
+</section>
+<section id="deamination-aware-alignment-index-align">
+<h2>Deamination-aware alignment (<code class="docutils literal notranslate"><span class="pre">index</span></code> + <code class="docutils literal notranslate"><span class="pre">align</span></code>)<a class="headerlink" href="#deamination-aware-alignment-index-align" title="Link to this heading"></a></h2>
+<p>Heavily edited reads align poorly to an unmodified reference, so DeamTools uses a bwa-meth-style three-letter strategy.</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">index</span></code></strong> writes a <em>doubly-converted</em> reference: every chromosome appears twice, once with all C→T (prefixed <code class="docutils literal notranslate"><span class="pre">f</span></code>) and once with all G→A (prefixed <code class="docutils literal notranslate"><span class="pre">r</span></code>), then runs <code class="docutils literal notranslate"><span class="pre">bwa</span> <span class="pre">index</span></code> on it.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">align</span></code></strong> maps each read in <strong>both</strong> conversion directions and keeps whichever scores higher. Because the deaminase edits both strands, a single read can carry both <code class="docutils literal notranslate"><span class="pre">C→T</span></code> and <code class="docutils literal notranslate"><span class="pre">G→A</span></code> edits, so each read is emitted twice: single-end as <code class="docutils literal notranslate"><span class="pre">C→T</span></code> (<code class="docutils literal notranslate"><span class="pre">YC:Z:ct</span></code>) and <code class="docutils literal notranslate"><span class="pre">G→A</span></code> (<code class="docutils literal notranslate"><span class="pre">YC:Z:ga</span></code>); paired-end as two fragment orientations <code class="docutils literal notranslate"><span class="pre">f</span></code> = (R1 <code class="docutils literal notranslate"><span class="pre">C→T</span></code>, R2 <code class="docutils literal notranslate"><span class="pre">G→A</span></code>) and <code class="docutils literal notranslate"><span class="pre">r</span></code> = (R1 <code class="docutils literal notranslate"><span class="pre">G→A</span></code>, R2 <code class="docutils literal notranslate"><span class="pre">C→T</span></code>). The original sequence is stashed in <code class="docutils literal notranslate"><span class="pre">YS:Z:</span></code> and the candidate in <code class="docutils literal notranslate"><span class="pre">YC:Z:</span></code>, both carried through <code class="docutils literal notranslate"><span class="pre">bwa</span> <span class="pre">mem</span> <span class="pre">-C</span></code>.</p></li>
+</ul>
+<p>After mapping, records are grouped by read name and the candidate with the higher primary alignment score (sum of the mates’ <code class="docutils literal notranslate"><span class="pre">AS</span></code> for pairs) is kept; the original SEQ is restored from <code class="docutils literal notranslate"><span class="pre">YS</span></code>, the <code class="docutils literal notranslate"><span class="pre">f</span></code>/<code class="docutils literal notranslate"><span class="pre">r</span></code> prefix is stripped from RNAME/RNEXT, the <code class="docutils literal notranslate"><span class="pre">YS</span></code>/<code class="docutils literal notranslate"><span class="pre">YC</span></code> tags are dropped, and the BAM is sorted and indexed. Choosing one orientation per fragment keeps the mates on the same converted contig, so proper pairing is preserved.</p>
+<section id="read-space-vs-reference-space">
+<h3>Read space vs reference space<a class="headerlink" href="#read-space-vs-reference-space" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">f</span></code> = (R1 <code class="docutils literal notranslate"><span class="pre">C→T</span></code>, R2 <code class="docutils literal notranslate"><span class="pre">G→A</span></code>) reads as though the two mates were converted
+differently. <strong>They are not.</strong> Each candidate is <em>one</em> conversion applied to the
+whole fragment in <strong>reference space</strong>; the labels differ only because R2’s raw
+FASTQ sequence is the reverse complement of the reference-space sequence, and
+the conversion has to be written in the space the FASTQ is actually in.</p>
+<p>A fragment whose <strong>top</strong> strand was deaminated, with R1 reading its left end and
+R2 its right end:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>reference (+)      ACGTCGATCGTTAGCCATGC
+deaminated at      *      *      *
+molecule, top      ATGTCGATTGTTAGCTATGC
+
+R1 (read space)    ATGTCGATTG               ← already reference space
+R2 (read space)              GCATAGCTAA     ← reverse complement of it
+R2 in ref space              TTAGCTATGC
+</pre></div>
+</div>
+<p>Candidate <code class="docutils literal notranslate"><span class="pre">f</span></code> means “convert this fragment <code class="docutils literal notranslate"><span class="pre">C→T</span></code> in reference space”:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>R1   read-space C→T   ATGTTGATTG
+R2   read-space G→A   ACATAACTAA  ──bwa reverse-complements──▶  TTAGTTATGT
+R2   ref-space  C→T                                             TTAGTTATGT   ✓ identical
+</pre></div>
+</div>
+<p>The two agree because complementing turns <code class="docutils literal notranslate"><span class="pre">G→A</span></code> into <code class="docutils literal notranslate"><span class="pre">C→T</span></code>. Formally, for any
+sequence <code class="docutils literal notranslate"><span class="pre">s</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">revcomp</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"G"</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">))</span>  <span class="o">==</span>  <span class="n">revcomp</span><span class="p">(</span><span class="n">s</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"C"</span><span class="p">,</span> <span class="s2">"T"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>So <code class="docutils literal notranslate"><span class="pre">f</span></code> puts <strong>both</strong> mates on the <code class="docutils literal notranslate"><span class="pre">f&lt;chrom&gt;</span></code> contig and <code class="docutils literal notranslate"><span class="pre">r</span></code> puts both on
+<code class="docutils literal notranslate"><span class="pre">r&lt;chrom&gt;</span></code>. That is the whole point of the label flip: it is what keeps the pair
+on one contig.</p>
+</section>
+<section id="why-there-are-two-candidates-and-not-four">
+<h3>Why there are two candidates and not four<a class="headerlink" href="#why-there-are-two-candidates-and-not-four" title="Link to this heading"></a></h3>
+<p>Converting each mate independently would give four combinations. The two extra
+ones are not alternative hypotheses about the molecule — they place the mates on
+<em>different</em> contigs, because a <code class="docutils literal notranslate"><span class="pre">C→T</span></code> mate goes to <code class="docutils literal notranslate"><span class="pre">f&lt;chrom&gt;</span></code> and a <code class="docutils literal notranslate"><span class="pre">G→A</span></code> mate to
+<code class="docutils literal notranslate"><span class="pre">r&lt;chrom&gt;</span></code>. Measured on 300 simulated top-strand-deaminated fragments against
+<code class="docutils literal notranslate"><span class="pre">data/test/chr20sim.deamtools.c2t</span></code>:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>candidate</p></th>
+<th class="head"><p>mates on one contig</p></th>
+<th class="head"><p>proper pairs</p></th>
+<th class="head"><p>mean <code class="docutils literal notranslate"><span class="pre">AS(R1)+AS(R2)</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">f</span></code> = (R1 <code class="docutils literal notranslate"><span class="pre">ct</span></code>, R2 <code class="docutils literal notranslate"><span class="pre">ga</span></code>)</p></td>
+<td><p>278/279</p></td>
+<td><p>273/279</p></td>
+<td><p><strong>200.0</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">r</span></code> = (R1 <code class="docutils literal notranslate"><span class="pre">ga</span></code>, R2 <code class="docutils literal notranslate"><span class="pre">ct</span></code>)</p></td>
+<td><p>272/279</p></td>
+<td><p>226/279</p></td>
+<td><p>159.2</p></td>
+</tr>
+<tr class="row-even"><td><p>(R1 <code class="docutils literal notranslate"><span class="pre">ct</span></code>, R2 <code class="docutils literal notranslate"><span class="pre">ct</span></code>)</p></td>
+<td><p>20/279</p></td>
+<td><p><strong>0/279</strong></p></td>
+<td><p>177.4</p></td>
+</tr>
+<tr class="row-odd"><td><p>(R1 <code class="docutils literal notranslate"><span class="pre">ga</span></code>, R2 <code class="docutils literal notranslate"><span class="pre">ga</span></code>)</p></td>
+<td><p>19/279</p></td>
+<td><p><strong>0/279</strong></p></td>
+<td><p>176.9</p></td>
+</tr>
+</tbody>
+</table>
+<p>Each mate still aligns somewhere on its own, so the invalid combinations collect
+a respectable <code class="docutils literal notranslate"><span class="pre">AS</span></code> — 177.4 here, <strong>above</strong> the valid <code class="docutils literal notranslate"><span class="pre">r</span></code> candidate’s 159.2. Adding
+them to the take-best would therefore sometimes select a cross-contig,
+non-proper pair over a correct one, and after the <code class="docutils literal notranslate"><span class="pre">f</span></code>/<code class="docutils literal notranslate"><span class="pre">r</span></code> prefix is stripped the
+two mates would land on the same chromosome name carrying mate coordinates and
+<code class="docutils literal notranslate"><span class="pre">TLEN</span></code> that mean nothing.</p>
+<p>The reason only one choice exists per fragment is biological, not a
+simplification: R1 and R2 report the <em>same molecule</em> in the same reference
+orientation, so whatever edits it carries appear in both. The conversion is a
+property of the fragment, so there is one choice to make, and take-best makes it.</p>
+<p>What take-best cannot do is absorb <strong>both</strong> directions at once — a
+double-stranded deaminase edits both strands, so a real fragment carries <code class="docutils literal notranslate"><span class="pre">C→T</span></code>
+and <code class="docutils literal notranslate"><span class="pre">G→A</span></code> together and neither three-letter alphabet covers both. That is a
+genuine limit of the three-letter approach, and it is why <code class="docutils literal notranslate"><span class="pre">deamtools</span></code> accuracy
+declines gently with editing rate (99.26% → 99.11% from 0% to 100% editing)
+rather than staying flat. Fixing <em>that</em> would need a different alignment model,
+not more conversion candidates.</p>
+</section>
+</section>
+<section id="edit-detection-conventions">
+<h2>Edit detection conventions<a class="headerlink" href="#edit-detection-conventions" title="Link to this heading"></a></h2>
+<p>All commands iterate aligned positions with <code class="docutils literal notranslate"><span class="pre">pysam</span></code>’s <code class="docutils literal notranslate"><span class="pre">get_aligned_pairs(matches_only=True)</span></code>, so only matched (M/=/X) bases are compared — insertions, deletions, and clips are skipped, and query/reference bases are always directly comparable.</p>
+<p>Two strand conventions are used, depending on the command:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Command</p></th>
+<th class="head"><p>Convention</p></th>
+<th class="head"><p>Counted as an edit</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bam2bw</span></code>, <code class="docutils literal notranslate"><span class="pre">qc</span></code></p></td>
+<td><p><strong>strand-agnostic</strong></p></td>
+<td><p>any reference <code class="docutils literal notranslate"><span class="pre">C→T</span></code> <strong>or</strong> <code class="docutils literal notranslate"><span class="pre">G→A</span></code> mismatch, regardless of read orientation</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bam2fragment</span></code></p></td>
+<td><p><strong>strand-agnostic, strand-resolved</strong></p></td>
+<td><p>the same mismatches, reported in two separate columns so the edited strand is preserved</p></td>
+</tr>
+</tbody>
+</table>
+<p>Reads flagged unmapped, duplicate, QC-fail, secondary, or supplementary are always excluded, then <code class="docutils literal notranslate"><span class="pre">min_mapq</span></code> is applied per read; <code class="docutils literal notranslate"><span class="pre">min_baseq</span></code> gates individual bases.</p>
+<section id="mates-are-merged-before-counting">
+<h3>Mates are merged before counting<a class="headerlink" href="#mates-are-merged-before-counting" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">bam2bw</span></code> and <code class="docutils literal notranslate"><span class="pre">qc</span></code> count per <strong>fragment</strong>, not per alignment record. Whenever the insert is shorter than twice the read length the two mates overlap, and every reference position in that overlap is reported by both of them — one position on one molecule, seen twice. Records are therefore grouped by read name and each fragment’s mates are collapsed into one <code class="docutils literal notranslate"><span class="pre">reference</span> <span class="pre">position</span> <span class="pre">→</span> <span class="pre">base</span></code> map before anything is tallied, so an overlapping position contributes once.</p>
+<p>Where the mates disagree at an overlap, the <strong>higher base quality wins</strong>: library prep turns the deaminated C into a real T:A pair that both strands carry, so the two mates are expected to agree and a disagreement means one of them misread.</p>
+<p>This is not a rounding detail. On <code class="docutils literal notranslate"><span class="pre">data/ACCESS-ATAC/chr10.bam</span></code> the overlap accounted for <strong>24.5%</strong> of <code class="docutils literal notranslate"><span class="pre">qc</span></code>’s editing opportunities and <strong>21.2%</strong> of <code class="docutils literal notranslate"><span class="pre">bam2bw</span></code>’s count-mode signal. Because the overlap is the middle of the fragment rather than a random subset of positions, counting it twice biased every rate derived from it rather than merely inflating the totals.</p>
+<p>Records whose mate never arrives — unpaired reads, a mate that was unmapped, filtered out, or placed on another contig — are counted as one-record fragments, so nothing is dropped. Single-end data is unaffected: one record is one fragment.</p>
+<p><code class="docutils literal notranslate"><span class="pre">bam2fragment</span></code> has always worked per fragment, and now shares the same merging helper.</p>
+</section>
+</section>
+<section id="tn5-cut-sites-bam2bw-event-tn5">
+<h2>Tn5 cut sites (<code class="docutils literal notranslate"><span class="pre">bam2bw</span> <span class="pre">--event</span> <span class="pre">tn5</span></code>)<a class="headerlink" href="#tn5-cut-sites-bam2bw-event-tn5" title="Link to this heading"></a></h2>
+<p>Deaminase libraries such as ACCESS-ATAC are tagmented with Tn5, so each fragment
+end also marks a Tn5 insertion — the ATAC-style accessibility signal. With
+<code class="docutils literal notranslate"><span class="pre">--event</span> <span class="pre">tn5</span></code>, <code class="docutils literal notranslate"><span class="pre">bam2bw</span></code> counts those insertion sites instead of edits.</p>
+<p>Each passing read contributes the insertion at its <strong>5′ end</strong>. For paired-end data
+the two mates’ 5′ ends are the two ends of the fragment, so every fragment gives
+two cuts; for single-end data each read gives the one cut it was sequenced from.
+A reverse read’s 5′ end is the right end of its alignment, not its left-most
+coordinate.</p>
+<p>Tn5 inserts as a dimer that nicks the two strands 9 bp apart, so the fragments on
+either side of one insertion share a 9-bp duplication <code class="docutils literal notranslate"><span class="pre">[p,</span> <span class="pre">p+9)</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>reference            ......[p ....... p+8]......
+right fragment, fwd       [p ─────────────────▶        5′ base = p
+left fragment, rev   ◀────────────── p+8]              5′ base = p+8  (reference_end = p+9)
+shifted cut                   p+4
+</pre></div>
+</div>
+<p>Moving each read 4 bp inward from its 5′ base — <code class="docutils literal notranslate"><span class="pre">reference_start</span> <span class="pre">+</span> <span class="pre">4</span></code> forward,
+<code class="docutils literal notranslate"><span class="pre">reference_end</span> <span class="pre">−</span> <span class="pre">5</span></code> reverse, the usual <strong>+4/−5 shift</strong> — puts both reads of one
+insertion on the same base, <code class="docutils literal notranslate"><span class="pre">p+4</span></code>, the centre of the duplication. Both shifts are options — <code class="docutils literal notranslate"><span class="pre">--forward_shift</span></code> (default <code class="docutils literal notranslate"><span class="pre">+4</span></code>, added to the start) and <code class="docutils literal notranslate"><span class="pre">--reverse_shift</span></code> (default <code class="docutils literal notranslate"><span class="pre">−5</span></code>, added to the exclusive end) — so a different convention, a pre-shifted BAM (<code class="docutils literal notranslate"><span class="pre">0</span></code>/<code class="docutils literal notranslate"><span class="pre">0</span></code>), or raw 5′ ends (<code class="docutils literal notranslate"><span class="pre">0</span></code>/<code class="docutils literal notranslate"><span class="pre">−1</span></code>) are one flag away. No reference sequence is involved, so <code class="docutils literal notranslate"><span class="pre">--fasta</span></code> is optional in this mode. <code class="docutils literal notranslate"><span class="pre">min_baseq</span></code>
+does not apply (a cut has no base to be of poor quality); the flag filters,
+<code class="docutils literal notranslate"><span class="pre">min_mapq</span></code>, <code class="docutils literal notranslate"><span class="pre">extend_size</span></code> and <code class="docutils literal notranslate"><span class="pre">normalize</span></code> do. <code class="docutils literal notranslate"><span class="pre">--mode</span> <span class="pre">ratio</span></code> is edit-only and is
+rejected with <code class="docutils literal notranslate"><span class="pre">--event</span> <span class="pre">tn5</span></code>.</p>
+<p>The geometry can be checked on real data by cross-correlating forward and reverse
+5′ bases: pairs from one insertion should sit at an offset of +8. On the Ultima
+single-end concurrent ACCESS-ATAC BAM they do, strongly (5.7× background at +8
+against 2.4× at +9). On the Illumina paired-end <code class="docutils literal notranslate"><span class="pre">HepG2.bam</span></code> there is a second
+population of similar size at +9 (2.3× at +8, 2.6× at +9), for which the shifted
+cuts land 1 bp apart. It is not soft-clipping (excluding clipped 5′ ends changes
+nothing) and not an extra non-genomic 5′ base (the first base’s mismatch rate is
+0.28%, no higher than the next); its origin is not yet known.</p>
+</section>
+<section id="signal-generation-bam2bw">
+<h2>Signal generation (<code class="docutils literal notranslate"><span class="pre">bam2bw</span></code>)<a class="headerlink" href="#signal-generation-bam2bw" title="Link to this heading"></a></h2>
+<p>For each region (whole chromosome or a merged BED interval) the reference is fetched once and reads are streamed via the BAM index.</p>
+<ul class="simple">
+<li><p><strong>count mode</strong> — a per-base count of edits. With <code class="docutils literal notranslate"><span class="pre">--extend_size</span> <span class="pre">E</span> <span class="pre">&gt;</span> <span class="pre">0</span></code>, each event is broadcast symmetrically into a window of width <code class="docutils literal notranslate"><span class="pre">2E</span> <span class="pre">+</span> <span class="pre">1</span></code> (clipped to the region), so the value at a base is the number of events within <code class="docutils literal notranslate"><span class="pre">E</span></code> bp.</p></li>
+<li><p><strong>ratio mode</strong> — <code class="docutils literal notranslate"><span class="pre">edit_count</span> <span class="pre">/</span> <span class="pre">total_ACGT_coverage</span></code> at each base; positions whose total coverage is below <code class="docutils literal notranslate"><span class="pre">--min_coverage</span></code> are written as <code class="docutils literal notranslate"><span class="pre">0</span></code>. <code class="docutils literal notranslate"><span class="pre">--extend_size</span></code> is ignored in this mode.</p></li>
+</ul>
+<p>Both are per fragment. The denominator is counted in the same pass as the numerator, over the same merged fragments, so the two cannot disagree about which reads they saw — and it now honours <code class="docutils literal notranslate"><span class="pre">--min_mapq</span></code>. Before 2026-09-10 the denominator came from pysam’s <code class="docutils literal notranslate"><span class="pre">count_coverage</span></code>, which applies no mapping-quality filter, so ratio mode was dividing edits from MAPQ-passing reads by coverage that included reads the numerator had excluded.</p>
+<p>BED intervals are merged before counting so a read spanning an overlap is not double-counted:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Input</span><span class="p">:</span>   <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span>  <span class="p">[</span><span class="mi">300</span><span class="p">,</span> <span class="mi">800</span><span class="p">)</span>  <span class="p">[</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">1500</span><span class="p">)</span>
+<span class="n">Merged</span><span class="p">:</span>  <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">800</span><span class="p">)</span>              <span class="p">[</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">1500</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="enzyme-sequence-bias">
+<h2>Enzyme sequence bias<a class="headerlink" href="#enzyme-sequence-bias" title="Link to this heading"></a></h2>
+<p>Deaminases have intrinsic flanking-sequence preferences (e.g. DddA strongly prefers <code class="docutils literal notranslate"><span class="pre">TC</span></code>). <code class="docutils literal notranslate"><span class="pre">qc</span></code> reports the per-trinucleotide edit fraction and renders a deaminase sequence-motif logo (the reference window around each editing event, centre excluded, <code class="docutils literal notranslate"><span class="pre">G→A</span></code> events reverse-complemented), both built directly from the BAM. A strongly skewed profile indicates that footprinting/occupancy analyses should correct for enzyme bias.</p>
+</section>
+<section id="parallelism-and-output">
+<h2>Parallelism and output<a class="headerlink" href="#parallelism-and-output" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">bam2bw</span></code> first groups its regions into <strong>batches</strong> of neighbouring intervals (about eight per worker, capped at 50 Mbp of reference each), and each batch opens the BAM once. Opening a BAM reads its whole index, so one open per region used to dominate peak runs: 57k HepG2 peaks meant 1.6–3.6 minutes of index loading alone. Each chromosome (or batch) is processed in its own <strong>worker process</strong> (<code class="docutils literal notranslate"><span class="pre">concurrent.futures.ProcessPoolExecutor</span></code>, via <code class="docutils literal notranslate"><span class="pre">deamtools.utils.run_jobs</span></code>); BAM and FASTA handles are opened independently per worker. Processes rather than threads because the per-read loops are pure Python, so a thread pool is serialised by the GIL — <code class="docutils literal notranslate"><span class="pre">qc</span> <span class="pre">--threads</span> <span class="pre">12</span></code> on a 3.2 M-record BAM ran at 105% CPU as threads and runs about 6× faster as processes. Results are merged in submission order, not completion order, so the output is bit-for-bit identical whatever the worker count. With <code class="docutils literal notranslate"><span class="pre">--threads</span> <span class="pre">1</span></code> everything runs in the calling process. For BigWig output, regions are sorted into <code class="docutils literal notranslate"><span class="pre">(chrom,</span> <span class="pre">start,</span> <span class="pre">end)</span></code> order — as required by <code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code> — and only non-zero bases are written (sparse, <code class="docutils literal notranslate"><span class="pre">span=1</span></code>); the header lists every chromosome even if it has no signal.</p>
+</section>
+<section id="complexity">
+<h2>Complexity<a class="headerlink" href="#complexity" title="Link to this heading"></a></h2>
+<p>For <em>N</em> aligned reads of average length <em>L</em>, edit detection is O(<em>N</em> × <em>L</em>) per thread. <code class="docutils literal notranslate"><span class="pre">bam2bw</span></code> holds one float32 array per in-flight chromosome (≈ one float per base), so peak memory scales with the largest chromosomes times the number of threads.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="usage/seq2edit.html" class="btn btn-neutral float-left" title="seq2edit" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api.html" class="btn btn-neutral float-right" title="API reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Zhijian Li.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
