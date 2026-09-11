@@ -9,6 +9,9 @@ import pysam
 import pytest
 
 from deamtools.preprocessing.bam2bw import (
+    _MAX_BATCH_SPAN,
+    _batch_regions,
+    _signal_for_batch,
     _signal_for_region,
     run_bam2bw,
 )
@@ -956,3 +959,64 @@ class TestTn5Cuts:
                 out_name="x",
                 event="cuts",
             )
+
+
+# ---------------------------------------------------------------------------
+# Batching: one BAM open per batch of regions
+# ---------------------------------------------------------------------------
+
+
+class TestBatching:
+    def test_order_and_membership_are_preserved(self):
+        regions = [("chr1", i * 1000, i * 1000 + 500) for i in range(1000)]
+        for workers in (1, 4, 12):
+            batches = _batch_regions(regions, workers)
+            assert [r for b in batches for r in b] == regions
+
+    def test_one_worker_means_one_batch(self):
+        regions = [("chr1", i * 1000, i * 1000 + 500) for i in range(1000)]
+        assert len(_batch_regions(regions, 1)) == 1
+
+    def test_several_batches_per_worker_for_balance(self):
+        regions = [("chr1", i * 1000, i * 1000 + 500) for i in range(1000)]
+        n = len(_batch_regions(regions, 4))
+        assert 4 * 8 <= n <= 4 * 8 + 1
+
+    def test_chromosome_sized_regions_get_a_batch_each(self):
+        # Whole-genome mode: never pack two chromosome-length arrays together.
+        chroms = [(f"chr{i}", 0, 100_000_000) for i in range(1, 6)]
+        assert _batch_regions(chroms, 1) == [[c] for c in chroms]
+        assert _batch_regions(chroms, 12) == [[c] for c in chroms]
+
+    def test_span_cap_holds_unless_one_region_exceeds_it(self):
+        regions = [("chr1", i * 10_000_000, (i + 1) * 10_000_000) for i in range(20)]
+        for batch in _batch_regions(regions, 1):
+            assert sum(e - s for _, s, e in batch) <= _MAX_BATCH_SPAN
+
+    def test_empty(self):
+        assert _batch_regions([], 4) == []
+
+    def test_a_batch_matches_region_by_region(self, tmp_path, fasta_file):
+        reads = [
+            _make_read("r1", "ATGTCGATCG", 0, 0),
+            _make_read("r2", "ACGTTGATCG", 0, 0),
+            _make_read("r3", "ACATCGATCG", 0, 0),
+        ]
+        bam = _write_bam(str(tmp_path / "b.bam"), reads)
+        regions = [("chr1", 0, 3), ("chr1", 3, 7), ("chr1", 7, 10)]
+        common = dict(
+            bam_path=bam,
+            fasta_path=fasta_file,
+            min_mapq=0,
+            min_baseq=0,
+            extend_size=0,
+            min_coverage=0,
+        )
+        for mode, event in (("count", "edit"), ("ratio", "edit"), ("count", "tn5")):
+            batch = _signal_for_batch(regions=regions, mode=mode, event=event, **common)
+            for (c, s, e), (bc, bs, be, sig) in zip(regions, batch, strict=True):
+                _, _, _, one = _signal_for_region(
+                    chrom=c, start=s, end=e, mode=mode, event=event, **common
+                )
+                assert (bc, bs, be) == (c, s, e)
+                assert np.array_equal(sig, one)

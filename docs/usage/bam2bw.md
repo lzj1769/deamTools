@@ -160,4 +160,4 @@ The value at each position is the number of deamination events observed there. I
 
 **`--extend_size`** — Set to 0 (default) for the raw single-base signal. For footprinting or broad accessibility analysis, values of 50–200 bp are typical. The optimal value depends on the expected size of accessible regions in your assay.
 
-**`--threads`** — The number of worker processes. Parallelism is per region, so setting `--threads` above the number of regions provides no benefit; each worker also holds its region's signal array, so memory grows with the worker count on a whole-genome run. For a human genome, 8–16 is a reasonable range.
+**`--threads`** — The number of worker processes. Regions are grouped into batches of neighbouring intervals — about eight per worker, each opening the BAM once — so a peak file with tens of thousands of intervals costs a few hundred file opens rather than one per interval. On a whole-genome run each chromosome is its own batch, so each worker holds one chromosome's signal array at a time and memory grows with the worker count. For a human genome, 8–16 is a reasonable range.

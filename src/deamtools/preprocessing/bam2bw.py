@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from functools import partial
 
 import numpy as np
@@ -256,37 +256,144 @@ def _signal_for_region(
     signal : numpy.ndarray
         1-D ``float32`` array of length ``end - start``.
     """
+    [(_, _, _, signal)] = _signal_for_batch(
+        bam_path=bam_path,
+        fasta_path=fasta_path,
+        regions=[(chrom, start, end)],
+        mode=mode,
+        min_mapq=min_mapq,
+        min_baseq=min_baseq,
+        extend_size=extend_size,
+        min_coverage=min_coverage,
+        event=event,
+    )
+    return chrom, start, end, signal
+
+
+def _region_signal(
+    bam: pysam.AlignmentFile,
+    fasta: pysam.FastaFile | None,
+    chrom: str,
+    start: int,
+    end: int,
+    mode: str,
+    min_mapq: int,
+    min_baseq: int,
+    extend_size: int,
+    min_coverage: int,
+    event: str,
+) -> np.ndarray:
+    """One region's per-base signal, from handles the caller already opened."""
     if event == EVENT_TN5:
-        # Cut sites need no reference sequence, so the FASTA is not opened.
+        return _get_cut_count(bam, chrom, start, end, extend_size, min_mapq)
+
+    assert fasta is not None  # opened for every edit-mode batch
+    edits, coverage = _get_edit_count(
+        bam=bam,
+        fasta=fasta,
+        chrom=chrom,
+        start=start,
+        end=end,
+        extend_size=extend_size if mode == "count" else 0,
+        min_mapq=min_mapq,
+        min_baseq=min_baseq,
+        want_coverage=mode == "ratio",
+    )
+    if mode == "count":
+        return edits
+
+    assert coverage is not None  # set whenever want_coverage was requested
+    coverage = np.where(coverage < min_coverage, 0.0, coverage)
+    signal = np.zeros_like(edits)
+    np.divide(edits, coverage, out=signal, where=coverage > 0)
+    return signal
+
+
+def _signal_for_batch(
+    bam_path: str,
+    fasta_path: str,
+    regions: Sequence[tuple[str, int, int]],
+    mode: str,
+    min_mapq: int,
+    min_baseq: int,
+    extend_size: int,
+    min_coverage: int,
+    event: str = EVENT_EDIT,
+) -> list[tuple[str, int, int, np.ndarray]]:
+    """Compute a batch of regions with one BAM (and FASTA) handle between them.
+
+    This is the unit of work handed to a worker. Opening a BAM reads its whole
+    index, so opening one per region -- as bam2bw used to -- made a peak run
+    mostly index loading: over 57k HepG2 peaks, counting Tn5 cuts on the
+    single-end BAM took as long as counting edits (43 s vs 44 s), though a cut
+    is trivial to compute next to an edit. Batches are runs of neighbouring
+    regions (see :func:`_batch_regions`), so successive fetches also land in
+    nearby parts of the file. Tn5 batches never open the FASTA.
+    """
+    fasta = None if event == EVENT_TN5 else pysam.FastaFile(fasta_path)
+    try:
         with pysam.AlignmentFile(bam_path, "rb") as bam:
-            cuts = _get_cut_count(bam, chrom, start, end, extend_size, min_mapq)
-        return chrom, start, end, cuts
+            return [
+                (
+                    chrom,
+                    start,
+                    end,
+                    _region_signal(
+                        bam,
+                        fasta,
+                        chrom,
+                        start,
+                        end,
+                        mode,
+                        min_mapq,
+                        min_baseq,
+                        extend_size,
+                        min_coverage,
+                        event,
+                    ),
+                )
+                for chrom, start, end in regions
+            ]
+    finally:
+        if fasta is not None:
+            fasta.close()
 
-    with (
-        pysam.AlignmentFile(bam_path, "rb") as bam,
-        pysam.FastaFile(fasta_path) as fasta,
-    ):
-        edits, coverage = _get_edit_count(
-            bam=bam,
-            fasta=fasta,
-            chrom=chrom,
-            start=start,
-            end=end,
-            extend_size=extend_size if mode == "count" else 0,
-            min_mapq=min_mapq,
-            min_baseq=min_baseq,
-            want_coverage=mode == "ratio",
-        )
 
-        if mode == "count":
-            return chrom, start, end, edits
+# A batch is capped at this many reference bases. On a whole-genome run every
+# region is a chromosome, so the cap keeps them one per batch and a worker never
+# holds several chromosome-length arrays at once; small peaks pack far below it.
+_MAX_BATCH_SPAN = 50_000_000
+# Batches per worker, so a slow batch does not leave the other workers idle.
+_BATCHES_PER_WORKER = 8
 
-        assert coverage is not None  # set whenever want_coverage was requested
-        coverage = np.where(coverage < min_coverage, 0.0, coverage)
 
-        signal = np.zeros_like(edits)
-        np.divide(edits, coverage, out=signal, where=coverage > 0)
-        return chrom, start, end, signal
+def _batch_regions(
+    regions: Sequence[tuple[str, int, int]], workers: int
+) -> list[list[tuple[str, int, int]]]:
+    """Split sorted regions into contiguous runs of roughly equal total span.
+
+    With one worker there is nothing to balance, so everything goes in as few
+    batches as the span cap allows -- the serial path gains as much from
+    opening the BAM once as the parallel one does. Order is preserved, so
+    concatenating the batches gives ``regions`` back.
+    """
+    if not regions:
+        return []
+    total = sum(end - start for _, start, end in regions)
+    n_target = 1 if workers <= 1 else workers * _BATCHES_PER_WORKER
+    span_goal = max(1, min(_MAX_BATCH_SPAN, -(-total // n_target)))
+    batches: list[list[tuple[str, int, int]]] = []
+    current: list[tuple[str, int, int]] = []
+    span = 0
+    for region in regions:
+        width = region[2] - region[1]
+        if current and span + width > span_goal:
+            batches.append(current)
+            current, span = [], 0
+        current.append(region)
+        span += width
+    batches.append(current)
+    return batches
 
 
 def run_bam2bw(
@@ -465,19 +572,21 @@ def run_bam2bw(
     chrom_order = {c: i for i, c in enumerate(chrom_sizes)}
     regions.sort(key=lambda r: (chrom_order[r[0]], r[1], r[2]))
 
-    logger.info(f"Processing {len(regions)} region(s) with {threads} worker(s)")
+    batches = _batch_regions(regions, threads)
+    logger.info(
+        f"Processing {len(regions)} region(s) in {len(batches)} batch(es) "
+        f"with {threads} worker(s)"
+    )
 
     os.makedirs(out_dir, exist_ok=True)
 
     results: dict[tuple[str, int, int], np.ndarray] = {}
     jobs = [
         partial(
-            _signal_for_region,
+            _signal_for_batch,
             bam_path=bam_path,
             fasta_path=fasta_path,
-            chrom=c,
-            start=s,
-            end=e,
+            regions=batch,
             mode=mode,
             min_mapq=min_mapq,
             min_baseq=min_baseq,
@@ -485,10 +594,11 @@ def run_bam2bw(
             min_coverage=min_coverage,
             event=event,
         )
-        for c, s, e in regions
+        for batch in batches
     ]
-    for chrom, start, end, signal in run_jobs(jobs, threads):
-        results[(chrom, start, end)] = signal
+    for batch_result in run_jobs(jobs, threads):
+        for chrom, start, end, signal in batch_result:
+            results[(chrom, start, end)] = signal
 
     norm_factor = 1.0
     if mode == "count":
