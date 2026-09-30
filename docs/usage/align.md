@@ -83,7 +83,7 @@ The kept records are rewritten back into the original reference space:
 
 - **Header.** BWA's `@SQ`/`@HD` lines describe the doubled `f`/`r` contigs, so they are dropped and replaced with a fresh `@HD VN:1.6 SO:coordinate` plus one `@SQ` per chromosome read from the original `<fasta>.fai`. Other header lines (`@PG`, `@RG`, `@CO`) are passed through.
 - **Reference names.** The leading `f`/`r` is stripped from `RNAME` and `RNEXT`, so `fchr1`/`rchr1` both become `chr1`.
-- **Read sequence.** `SEQ` (the converted read) is replaced with the original from the `YS:Z:` tag — reverse-complemented for reverse-strand records (flag `0x10`), and trimmed by the CIGAR hard-clip lengths for hard-clipped records. The `YS` and `YC` tags are removed; all other tags (`NM`, `AS`, `MD`, …) are kept.
+- **Read sequence.** `SEQ` (the converted read) is replaced with the original from the `YS:Z:` tag — reverse-complemented for reverse-strand records (flag `0x10`), and trimmed by the CIGAR hard-clip lengths for hard-clipped records. The `YS` and `YC` tags are removed. Reference-dependent tags are restored as described below; `AS` and `XS` retain converted-reference scores.
 
 The result is a standard BAM whose coordinates, chromosome names, and read sequences are all in the original reference space, ready for `deamtools bam2bw`, `bam2fragment`, and `qc`.
 
@@ -127,3 +127,46 @@ deamtools align \
 - The intermediate `<out_name>.sam` is kept alongside the BAM; delete it once you have the sorted BAM if you don't need it.
 - Paired FASTQs must contain the same number of reads in the same order; a length mismatch raises an error.
 - The output BAM is coordinate-sorted and indexed, so it is immediately usable by the rest of the toolkit.
+
+### Candidate confidence and restored SAM tags
+
+Candidate selection still uses the sum of primary BWA alignment scores (`AS`)
+for each read or read pair. Candidates are compared in original-reference space
+(contig, position, strand, CIGAR and mate identity). When a competing mapped
+candidate has a different placement, the selected candidate's MAPQ is capped at
+the difference between their summed scores. Thus equal-scoring distinct
+placements receive MAPQ 0; duplicate conversion candidates at the same placement
+do not lower MAPQ. This is a conservative score-gap ceiling, not a calibrated
+error-probability model, and never increases BWA's MAPQ. It can reduce retention
+under downstream MAPQ filters compared with older DeamTools versions.
+
+`NM` and `MD` are recalculated against the original FASTA after restoring read
+sequences. `SA` and `XA` references and edit distances are restored as well.
+`AS` and `XS` remain BWA scores in converted-reference space, used for candidate
+selection; they are not scores recomputed against the original reference.
+
+Paired FASTQ files must have matching read names in matching order. Conventional
+R1 `/1` and R2 `/2` suffixes are normalized to a shared name. Mismatched names or
+record counts raise an error rather than producing a successful BAM.
+
+### Per-record conversion counts
+
+DeamTools adds two custom integer tags to mapped records with restored sequence:
+
+| Tag | Definition |
+| --- | --- |
+| `ZC:i` | Number of reference C → read T observations |
+| `ZG:i` | Number of reference G → read A observations |
+
+Both patterns are counted regardless of the read's strand, against the original
+FASTA, in the same pass as NM/MD. Counts use aligned bases (`M`, `=`, `X`) without
+an additional base-quality filter. Insertions, deletions, reference skips and
+soft/hard clipping do not contribute. Zero counts are explicitly written;
+unmapped records or records without sequence omit both tags.
+
+Each alignment record is counted independently, including secondary/supplementary
+records. Mates are counted separately without overlap merging. These are observed
+substitutions, not proof of enzymatic editing. Do not sum these tags as a
+replacement for quality-filtered, mate-merged QC statistics. `NM` still includes
+these substitutions. `ZC`/`ZG` are DeamTools-specific conventions, not globally
+standardized tags; any incoming values are replaced during restoration.

@@ -148,9 +148,19 @@ def _feed_converted(
                     _write_record(out, name, seq.translate(GA_TABLE), qual, "ga", seq)
         else:
             with pysam.FastxFile(read1) as fq1, pysam.FastxFile(read2) as fq2:
-                for r1, r2 in zip(fq1, fq2, strict=True):
+                for pair_number, (r1, r2) in enumerate(
+                    zip(fq1, fq2, strict=True), start=1
+                ):
                     n1, s1, q1 = _record_fields(r1)
                     n2, s2, q2 = _record_fields(r2)
+                    key1 = n1[:-2] if n1.endswith("/1") else n1
+                    key2 = n2[:-2] if n2.endswith("/2") else n2
+                    if key1 != key2:
+                        raise ValueError(
+                            f"FASTQ mate names differ at pair {pair_number}: "
+                            f"{n1!r} != {n2!r}"
+                        )
+                    n1 = n2 = key1
                     # Orientation f: read1 C->T, read2 G->A (interleaved pair).
                     _write_record(out, n1, s1.translate(CT_TABLE), q1, "f", s1)
                     _write_record(out, n2, s2.translate(GA_TABLE), q2, "f", s2)
@@ -170,7 +180,77 @@ def _emit_clean_header(fasta_path: str, out: IO[str]) -> None:
             out.write(f"@SQ\tSN:{chrom}\tLN:{length}\n")
 
 
-def _restore_alignment(line: str) -> str:
+def _original_contig(name: str) -> str:
+    return name[1:] if name.startswith(("f", "r")) else name
+
+
+def _reference_tags(
+    seq: str, cigar: str, chrom: str, pos: int, reference: pysam.FastaFile
+) -> tuple[int, str, int, int]:
+    """Return NM, MD, C→T and G→A counts against the original reference.
+
+    Position is zero-based. Counts cover aligned bases only, without a base
+    quality filter; sequence is already in reference orientation.
+    """
+    ops = [(int(n), op) for n, op in CIGAR_OP_RE.findall(cigar)]
+    span = sum(n for n, op in ops if op in "MDN=X")
+    ref = reference.fetch(chrom, pos, pos + span).upper()
+    if len(ref) != span:
+        raise ValueError(f"Alignment extends beyond reference: {chrom}:{pos}")
+    seq = seq.upper()
+    q = r = nm = matches = ct = ga = 0
+    md: list[str] = []
+    for n, op in ops:
+        if op in "M=X":
+            for i in range(n):
+                if seq[q + i] == ref[r + i] and seq[q + i] in "ACGT":
+                    matches += 1
+                else:
+                    md.extend((str(matches), ref[r + i]))
+                    matches = 0
+                    nm += 1
+                    ct += ref[r + i] == "C" and seq[q + i] == "T"
+                    ga += ref[r + i] == "G" and seq[q + i] == "A"
+            q += n
+            r += n
+        elif op == "D":
+            md.extend((str(matches), "^" + ref[r : r + n]))
+            matches = 0
+            nm += n
+            r += n
+        elif op == "N":
+            r += n
+        elif op == "I":
+            nm += n
+            q += n
+        elif op == "S":
+            q += n
+    md.append(str(matches))
+    return nm, "".join(md), ct, ga
+
+
+def _restore_hit_tag(tag: str, original: str, reference: pysam.FastaFile) -> str:
+    """Restore contigs and edit distances inside BWA SA/XA hit lists."""
+    hits = []
+    for hit in tag[5:].split(";"):
+        if not hit:
+            continue
+        fields = hit.split(",")
+        fields[0] = _original_contig(fields[0])
+        if tag.startswith("SA:"):
+            pos, strand, cigar = int(fields[1]) - 1, fields[2], fields[3]
+        else:
+            pos, strand, cigar = abs(int(fields[1])) - 1, fields[1][0], fields[2]
+        seq = _revcomp(original) if strand == "-" else original
+        left, right = _hard_clip_offsets(cigar)
+        seq = seq[left : len(seq) - right]
+        nm, _, _, _ = _reference_tags(seq, cigar, fields[0], pos, reference)
+        fields[-1] = str(nm)
+        hits.append(",".join(fields))
+    return tag[:5] + ";".join(hits) + ";"
+
+
+def _restore_alignment(line: str, reference: pysam.FastaFile | None = None) -> str:
     fields = line.rstrip("\n").split("\t")
     if len(fields) < 11:
         return line
@@ -188,22 +268,39 @@ def _restore_alignment(line: str) -> str:
 
     orig: str | None = None
     kept_tags: list[str] = []
+    hit_tags: list[str] = []
     for tag in fields[11:]:
         if tag.startswith("YS:Z:"):
             orig = tag[5:]
         elif tag.startswith("YC:Z:"):
             continue  # candidate marker; internal only
+        elif tag.startswith(("NM:", "MD:", "ZC:", "ZG:")):
+            continue  # Converted-reference tags are invalid after SEQ restoration.
+        elif tag.startswith(("SA:Z:", "XA:Z:")):
+            hit_tags.append(tag)
         else:
             kept_tags.append(tag)
 
+    original = orig
     if orig is not None and seq_field != "*":
         if flag & 16:
             orig = _revcomp(orig)
         left, right = _hard_clip_offsets(cigar)
         if left or right:
             orig = orig[left : len(orig) - right]
-        if len(orig) == len(seq_field):
-            fields[9] = orig
+        if len(orig) != len(seq_field):
+            raise ValueError(
+                f"Cannot restore sequence for {fields[0]!r}: length mismatch"
+            )
+        fields[9] = orig
+
+    if reference is not None and original is not None:
+        kept_tags.extend(_restore_hit_tag(tag, original, reference) for tag in hit_tags)
+        if not flag & 4 and seq_field != "*":
+            nm, md, ct, ga = _reference_tags(
+                fields[9], cigar, fields[2], int(fields[3]) - 1, reference
+            )
+            kept_tags.extend((f"NM:i:{nm}", f"MD:Z:{md}", f"ZC:i:{ct}", f"ZG:i:{ga}"))
 
     fields = fields[:11] + kept_tags
     return "\t".join(fields) + "\n"
@@ -237,7 +334,21 @@ def _primary_score(lines: list[str]) -> int:
     return total
 
 
-def _flush_group(lines: list[str], out: IO[str]) -> None:
+def _primary_locations(lines: list[str]) -> tuple[tuple, ...]:
+    """Compare primary placements in original reference space, by mate."""
+    locations = []
+    for line in lines:
+        f = line.rstrip("\n").split("\t")
+        flag = int(f[1])
+        if flag & (0x100 | 0x800 | 0x4):
+            continue
+        locations.append((flag & 0xC0, _original_contig(f[2]), f[3], flag & 16, f[5]))
+    return tuple(sorted(locations))
+
+
+def _flush_group(
+    lines: list[str], out: IO[str], reference: pysam.FastaFile | None = None
+) -> None:
     """Pick the best candidate among ``lines`` (one read name) and emit it.
 
     Records are partitioned by their ``YC`` candidate tag; the candidate with
@@ -250,13 +361,42 @@ def _flush_group(lines: list[str], out: IO[str]) -> None:
         by_candidate.setdefault(key, []).append(line)
 
     best = max(by_candidate, key=lambda k: _primary_score(by_candidate[k]))
+    best_locations = _primary_locations(by_candidate[best])
+    competitors = [
+        _primary_score(records)
+        for key, records in by_candidate.items()
+        if key != best
+        and _primary_locations(records)
+        and _primary_locations(records) != best_locations
+    ]
+    # Conservative score-gap ceiling, not a calibrated error probability.
+    # Equal-scoring distinct placements get MAPQ 0; same-location conversion
+    # duplicates do not reduce confidence. Never increase BWA's MAPQ.
+    cap = (
+        max(0, _primary_score(by_candidate[best]) - max(competitors))
+        if competitors
+        else None
+    )
     for line in by_candidate[best]:
-        out.write(_restore_alignment(line))
+        fields = line.rstrip("\n").split("\t")
+        if cap is not None:
+            fields[4] = str(min(int(fields[4]), cap))
+            # SA MAPQs describe the same selected candidate's split records.
+            for i in range(11, len(fields)):
+                if fields[i].startswith("SA:Z:"):
+                    hits = []
+                    for hit in fields[i][5:].rstrip(";").split(";"):
+                        parts = hit.split(",")
+                        parts[4] = str(min(int(parts[4]), cap))
+                        hits.append(",".join(parts))
+                    fields[i] = "SA:Z:" + ";".join(hits) + ";"
+        out.write(_restore_alignment("\t".join(fields) + "\n", reference))
 
 
 def _process_sam(
     bwa_stdout: Iterable[str],
     sort_stdin: IO[str],
+    reference: pysam.FastaFile | None = None,
 ) -> None:
     """Group bwa output by read name and write the best candidate of each.
 
@@ -277,12 +417,12 @@ def _process_sam(
         tab = line.find("\t")
         qname = line[:tab] if tab != -1 else line.rstrip("\n")
         if group and qname != group_qname:
-            _flush_group(group, sort_stdin)
+            _flush_group(group, sort_stdin, reference)
             group = []
         group_qname = qname
         group.append(line)
     if group:
-        _flush_group(group, sort_stdin)
+        _flush_group(group, sort_stdin, reference)
 
 
 def run_align(
@@ -387,11 +527,15 @@ def run_align(
     feeder.start()
 
     try:
-        with open(sam_path, "w") as sam:
+        with open(sam_path, "w") as sam, pysam.FastaFile(fasta_path) as reference:
             _emit_clean_header(fasta_path, sam)
             if bwa_proc.stdout is None:  # unreachable with stdout=PIPE
                 raise RuntimeError("bwa mem produced no stdout stream")
-            _process_sam(bwa_proc.stdout, sam)
+            _process_sam(bwa_proc.stdout, sam, reference)
+    except BaseException:
+        bwa_proc.kill()
+        bwa_proc.wait()
+        raise
     finally:
         feeder.join()
 

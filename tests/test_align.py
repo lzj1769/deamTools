@@ -146,7 +146,7 @@ class TestRestoreAlignment:
         fields = out.rstrip("\n").split("\t")
         assert fields[9] == "ACGTC"  # SEQ restored from YS
         assert "YS:Z:" not in out  # YS tag dropped
-        assert "NM:i:1" in fields  # other tags kept
+        assert "NM:i:1" not in fields  # stale converted-reference tag removed
 
     def test_restores_revcomp_seq_on_reverse_strand(self):
         # Reverse-strand read: BAM SEQ is revcomp of the converted read; the
@@ -238,7 +238,7 @@ class TestRestoreAlignment:
         out = _restore_alignment(line)
         assert "YC:Z:" not in out  # candidate marker dropped
         assert "YS:Z:" not in out  # original-seq tag dropped
-        assert "NM:i:1" in out  # real tags kept
+        assert "NM:i:1" not in out  # stale converted-reference tag removed
         assert out.rstrip("\n").split("\t")[9] == "ACGTC"
 
 
@@ -454,3 +454,186 @@ class TestHeaderAndStream:
         for ln in lines:
             assert ln.split("\t")[2] == "chr1"  # rchr1 -> chr1
             assert "YC:Z:" not in ln
+
+
+@pytest.mark.parametrize("names", [("a/1", "a/2"), ("a", "a")])
+def test_mate_name_normalization(tmp_path, names):
+    paths = [str(tmp_path / name) for name in ("r1.fq", "r2.fq")]
+    for path, name in zip(paths, names, strict=True):
+        _write_fastq(path, [(name, "ACGT", "IIII")])
+    sink = _Capture()
+    _feed_converted(*paths, sink)
+    assert sink.getvalue().count("@a\t") == 4
+
+
+def test_mate_name_mismatch(tmp_path):
+    paths = [str(tmp_path / name) for name in ("r1.fq", "r2.fq")]
+    for path, name in zip(paths, ("a", "b"), strict=True):
+        _write_fastq(path, [(name, "ACGT", "IIII")])
+    sink = _Capture()
+    with pytest.raises(ValueError, match="pair 1"):
+        _feed_converted(*paths, sink)
+    assert sink.getvalue() == ""
+
+
+@pytest.mark.parametrize(
+    "chrom,score,expected", [("rchr1", 50, 60), ("rchr2", 50, 0), ("rchr2", 47, 3)]
+)
+def test_candidate_mapq(chrom, score, expected):
+    def record(contig, candidate, value):
+        return f"r\t0\t{contig}\t1\t60\t5M\t*\t0\t0\tATGTT\tIIIII\tYS:Z:ACGTC\tYC:Z:{candidate}\tAS:i:{value}\n"
+
+    sink = io.StringIO()
+    _process_sam([record("fchr1", "ct", 50), record(chrom, "ga", score)], sink)
+    assert int(sink.getvalue().split("\t")[4]) == expected
+
+
+def test_reference_tags_and_hit_tags(tmp_path):
+    import pysam
+
+    from deamtools.align.align import _reference_tags
+
+    path = tmp_path / "ref.fa"
+    path.write_text(">chr1\nACGTACGTACGT\n")
+    pysam.faidx(str(path))
+    with pysam.FastaFile(str(path)) as ref:
+        # soft clip, insertion, deletion, skipped reference and hard clip
+        assert _reference_tags("TACAGTACG", "1S2M1I2M1D1M1N2M1H", "chr1", 0, ref) == (
+            5,
+            "4^A0C0T0A0",
+            0,
+            0,
+        )
+        line = "r\t0\tfchr1\t1\t60\t4M\t*\t0\t0\tATGT\tIIII\tYS:Z:ATGT\tNM:i:0\tMD:Z:4\tSA:Z:rchr1,1,-,4M,60,0;\tXA:Z:fchr1,+1,4M,0;\n"
+        out = _restore_alignment(line, ref)
+        assert "NM:i:1" in out and "MD:Z:1C2" in out
+        assert "SA:Z:chr1,1,-,4M,60,1;" in out
+        assert "XA:Z:chr1,+1,4M,1;" in out
+        reverse = line.replace("\t0\tfchr1", "\t16\tfchr1")
+        restored = _restore_alignment(reverse, ref)
+        assert restored.split("\t")[9] == "ACAT"
+        assert "MD:Z:2G1" in restored
+
+
+def test_real_bwa_regressions(tmp_path):
+    import random
+    import shutil
+    import subprocess
+
+    import pysam
+
+    from deamtools.align.index import run_index
+
+    if not all(shutil.which(x) for x in ("bwa", "samtools")):
+        pytest.skip("BWA and samtools required for integration test")
+    rng = random.Random(123)
+
+    def seq(n):
+        return "".join(rng.choices("ACGT", k=n))
+
+    q = seq(150)
+    a, b = seq(500) + q.replace("T", "C") + seq(500), seq(500) + q.replace(
+        "A", "G"
+    ) + seq(500)
+    ref = tmp_path / "ref.fa"
+    ref.write_text(f">A\n{a}\n>B\n{b}\n")
+    run_index(str(ref))
+    fq = tmp_path / "r.fq"
+    split = a[100:250] + b[100:250]
+    _write_fastq(str(fq), [("ambiguous", q, "I" * 150), ("split", split, "I" * 300)])
+    run_align(str(ref), str(fq), str(tmp_path), "out")
+    with pysam.AlignmentFile(tmp_path / "out.bam") as bam:
+        records = list(bam)
+        ambiguous = [r for r in records if r.query_name == "ambiguous"]
+        assert len(ambiguous) == 1
+        assert ambiguous[0].mapping_quality == 0
+        assert ambiguous[0].get_tag("NM") == q.count("T")
+        assert ambiguous[0].get_tag("ZC") == q.count("T")
+        assert ambiguous[0].get_tag("ZG") == 0
+        split_records = [r for r in records if r.query_name == "split"]
+        assert len(split_records) >= 2
+        for r in split_records:
+            assert r.has_tag("SA")
+            for hit in r.get_tag("SA").rstrip(";").split(";"):
+                assert hit.split(",")[0] in bam.references
+    result = subprocess.run(
+        ["samtools", "calmd", str(tmp_path / "out.bam"), str(ref)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "different NM" not in result.stderr
+    assert "different MD" not in result.stderr
+    fq2 = tmp_path / "r2.fq"
+    _write_fastq(str(fq2), [("wrong", q, "I" * 150)])
+    with pytest.raises(ValueError, match="mate names differ"):
+        run_align(str(ref), str(fq), str(tmp_path), "bad", read2=str(fq2))
+    assert not (tmp_path / "bad.bam").exists()
+
+
+@pytest.mark.parametrize("second_pos,expected", [(30, 60), (40, 0)])
+def test_paired_ambiguity_considers_both_mates(second_pos, expected):
+    lines = []
+    for candidate, prefix, position in [("f", "f", 30), ("r", "r", second_pos)]:
+        for flag, pos in [(65, 10), (129, position)]:
+            lines.append(
+                f"p\t{flag}\t{prefix}chr1\t{pos}\t60\t5M\t=\t10\t0\tATGTT\tIIIII\tYS:Z:ACGTC\tYC:Z:{candidate}\tAS:i:50\n"
+            )
+    sink = io.StringIO()
+    _process_sam(lines, sink)
+    result = sink.getvalue().splitlines()
+    assert len(result) == 2
+    assert all(int(line.split("\t")[4]) == expected for line in result)
+
+
+def test_reverse_hard_clipped_tags(tmp_path):
+    import pysam
+
+    path = tmp_path / "ref.fa"
+    path.write_text(">chr1\nACGT\n")
+    pysam.faidx(str(path))
+    line = "r\t16\tfchr1\t1\t60\t2H4M1H\t*\t0\t0\tAAAA\tIIII\tYS:Z:AACATTG\tNM:i:0\tMD:Z:4\n"
+    with pysam.FastaFile(str(path)) as ref:
+        out = _restore_alignment(line, ref)
+    assert out.split("\t")[9] == "ATGT"
+    assert "NM:i:1" in out
+    assert "MD:Z:1C2" in out
+
+
+@pytest.mark.parametrize("flag", [0, 16, 65, 129, 256, 2048])
+def test_conversion_count_tags_on_each_record(tmp_path, flag):
+    import pysam
+
+    path = tmp_path / "ref.fa"
+    path.write_text(">chr1\nCCGG\n")
+    pysam.faidx(str(path))
+    # TTAA is its own reverse complement; low qualities do not filter tags.
+    line = f"r\t{flag}\tfchr1\t1\t60\t4M\t*\t0\t0\tTTAA\t!!!!\tYS:Z:TTAA\tZC:i:99\tZG:i:99\n"
+    with pysam.FastaFile(str(path)) as ref:
+        fields = _restore_alignment(line, ref).strip().split("\t")
+    assert fields.count("ZC:i:2") == 1
+    assert fields.count("ZG:i:2") == 1
+    assert "NM:i:4" in fields
+    assert not any(tag.endswith(":99") for tag in fields[11:])
+
+
+def test_conversion_count_cigar_and_zero(tmp_path):
+    import pysam
+
+    from deamtools.align.align import _reference_tags
+
+    path = tmp_path / "ref.fa"
+    path.write_text(">chr1\nCGCCG\n")
+    pysam.faidx(str(path))
+    with pysam.FastaFile(str(path)) as ref:
+        assert _reference_tags("gttaa", "1S1M1I1X1D1N1M1H", "chr1", 0, ref)[2:] == (
+            1,
+            2,
+        )
+        line = "r\t0\tfchr1\t1\t60\t5M\t*\t0\t0\tCGCCG\tIIIII\tYS:Z:CGCCG\n"
+        out = _restore_alignment(line, ref)
+        assert "ZC:i:0" in out and "ZG:i:0" in out
+        for flag, seq in [(4, "CGCCG"), (0, "*")]:
+            line = f"r\t{flag}\tfchr1\t1\t0\t5M\t*\t0\t0\t{seq}\t*\tYS:Z:CGCCG\tZC:i:99\tZG:i:99\n"
+            out = _restore_alignment(line, ref)
+            assert "ZC:" not in out and "ZG:" not in out
