@@ -20,6 +20,8 @@ two keep a lone mate as a one-record fragment.
 
 from __future__ import annotations
 
+import heapq
+from collections import Counter
 from collections.abc import Iterable, Iterator, Sequence
 
 import pysam
@@ -47,7 +49,12 @@ def mates_can_pair(read: pysam.AlignedSegment) -> bool:
     )
 
 
-def iter_fragments(reads: Iterable[pysam.AlignedSegment]) -> Iterator[Fragment]:
+def iter_fragments(
+    reads: Iterable[pysam.AlignedSegment],
+    *,
+    coordinate_sorted: bool = False,
+    diagnostics: Counter[str] | None = None,
+) -> Iterator[Fragment]:
     """Group records into fragments, pairing mates by read name.
 
     Yields a 1- or 2-tuple per fragment. A record that could have a mate is held
@@ -62,7 +69,22 @@ def iter_fragments(reads: Iterable[pysam.AlignedSegment]) -> Iterator[Fragment]:
     pass one contig at a time to bound it properly.
     """
     pending: dict[str, pysam.AlignedSegment] = {}
+    # Optional eviction uses the mate's declared coordinate, never an arbitrary
+    # insert-size cutoff. Only enable on a single coordinate-sorted contig.
+    expiry: list[tuple[int, int, str]] = []
+    serials: dict[str, int] = {}
+    serial = 0
     for read in reads:
+        if coordinate_sorted:
+            while expiry and expiry[0][0] < read.reference_start:
+                _, token, name = heapq.heappop(expiry)
+                if serials.get(name) == token:
+                    serials.pop(name)
+                    orphan = pending.pop(name)
+                    yield (orphan,)
+            # Paired entries can leave stale heap entries until their coordinate;
+            # the token prevents collisions if names are reused.
+
         if not mates_can_pair(read):
             yield (read,)
             continue
@@ -70,7 +92,16 @@ def iter_fragments(reads: Iterable[pysam.AlignedSegment]) -> Iterator[Fragment]:
         mate = pending.pop(qname, None)
         if mate is None:
             pending[qname] = read
+            if coordinate_sorted:
+                serial += 1
+                serials[qname] = serial
+                heapq.heappush(expiry, (read.next_reference_start, serial, qname))
+            if diagnostics is not None:
+                diagnostics["pending_mates_peak"] = max(
+                    diagnostics["pending_mates_peak"], len(pending)
+                )
             continue
+        serials.pop(qname, None)
         yield (mate, read)
     for orphan in pending.values():
         yield (orphan,)
@@ -81,6 +112,7 @@ def merge_fragment_bases(
     min_baseq: int,
     start: int | None = None,
     end: int | None = None,
+    diagnostics: Counter[str] | None = None,
 ) -> dict[int, str]:
     """Collapse a fragment's mates into ``reference position -> called base``.
 
@@ -118,6 +150,12 @@ def merge_fragment_bases(
                 continue
             base = seq[query_pos]
             previous = best.get(ref_pos)
+            if previous is not None and diagnostics is not None:
+                diagnostics["overlap_positions"] += 1
+                if base != previous[0]:
+                    diagnostics["overlap_conflicts"] += 1
+                    if qual == previous[1]:
+                        diagnostics["equal_quality_conflicts"] += 1
             if previous is None or qual > previous[1]:
                 best[ref_pos] = (base, qual)
                 ambiguous.discard(ref_pos)

@@ -18,7 +18,7 @@ from deamtools.utils import get_version
 logger = logging.getLogger(__name__)
 
 # Argparse-internal attributes we don't want to print as user parameters.
-_INTERNAL_ARG_KEYS = frozenset({"func", "command"})
+_INTERNAL_ARG_KEYS = frozenset({"func", "command", "_invocation"})
 
 
 def _log_invocation(args: argparse.Namespace) -> None:
@@ -64,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_bam2bw_parser(subparsers)
     _add_bam2fragment_parser(subparsers)
     _add_qc_parser(subparsers)
+    _add_qc_summary_parser(subparsers)
     _add_match_parser(subparsers)
     _add_footprint_parser(subparsers)
     _add_seq2edit_parser(subparsers)
@@ -571,6 +572,25 @@ def _add_bam2fragment_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_run_bam2fragment)
 
 
+def _add_qc_summary_parser(subparsers: argparse._SubParsersAction) -> None:
+    parser = subparsers.add_parser(
+        "qc-summary", help="Compare QC JSON reports in CSV and HTML."
+    )
+    parser.add_argument(
+        "--reports", nargs="+", required=True, help="QC JSON files to compare."
+    )
+    parser.add_argument("--out_dir", required=True)
+    parser.add_argument("--out_name", default="qc_summary")
+    parser.set_defaults(func=_run_qc_summary)
+
+
+def _run_qc_summary(args: argparse.Namespace) -> int:
+    from deamtools.qc.summary import run_qc_summary
+
+    run_qc_summary(args.reports, args.out_dir, args.out_name)
+    return 0
+
+
 def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
         "qc",
@@ -737,6 +757,17 @@ def _add_qc_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Skip rendering/embedding the summary figure in the HTML report.",
     )
 
+    parser.add_argument(
+        "--report-dir",
+        dest="report_dir",
+        metavar="DIR",
+        help="Write report.html, external assets and CSVs to a portable directory.",
+    )
+    parser.add_argument(
+        "--redact-paths",
+        action="store_true",
+        help="Remove directory components from HTML/report-directory provenance and recorded command paths. Local QC JSON retains full provenance.",
+    )
     parser.set_defaults(func=_run_qc)
 
 
@@ -1221,6 +1252,9 @@ def _run_qc(args: argparse.Namespace) -> int:
         plot=not args.no_plot,
         n_reads=args.n_reads,
         logo_scale=args.logo_scale,
+        report_dir=args.report_dir,
+        command=getattr(args, "_invocation", None),
+        redact_paths=args.redact_paths,
     )
     return 0
 
@@ -1283,6 +1317,8 @@ def _run_footprint(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    # Do not infer an invocation for programmatic main(argv) calls.
+    args._invocation = shlex.join(sys.argv) if argv is None else None
 
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",

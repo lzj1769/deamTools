@@ -124,6 +124,8 @@ def test_qc_is_identical_with_worker_processes(dataset, tmp_path):
             threads=workers,
             plot=False,
         )
+        # Execution metadata differs; biological metrics must be identical.
+        m.pop("provenance")
         outs.append(json.dumps(m, sort_keys=True))
     assert outs[0] == outs[1]
     # And the pool really had work on every contig.

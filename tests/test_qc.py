@@ -86,16 +86,16 @@ class TestQC:
     def test_edit_rate_and_opportunities(self, tmp_path, fasta_file):
         # One forward read covering pos 0-9 with a single C->T edit at pos 4.
         # Edit calling is strand-agnostic (matching bam2bw): every reference C
-        # or G at a position with both flanks present (internal pos 1..8) is an
-        # opportunity. Ref ACGTCGATCG -> C/G at 1,2,4,5,8 = 5 opportunities.
+        # or G is an opportunity, including the contig boundary.
+        # Ref ACGTCGATCG -> C/G at 1,2,4,5,8,9 = 6 opportunities.
         read = _make_read("r1", "ACGTTGATCG", 0, is_paired=False)  # T at pos 4
         bam = _write_bam(str(tmp_path / "x.bam"), [read])
         out_dir = str(tmp_path)
         m = run_qc(bam, fasta_file, out_dir, "qc", min_mapq=0, min_baseq=0, plot=False)
 
-        assert m["editing"]["total_opportunities"] == 5  # C/G at 1,2,4,5,8
+        assert m["editing"]["total_opportunities"] == 6  # C/G at 1,2,4,5,8,9
         assert m["editing"]["total_edits"] == 1
-        assert m["editing"]["global_edit_rate"] == pytest.approx(1 / 5)
+        assert m["editing"]["global_edit_rate"] == pytest.approx(1 / 6)
 
     def test_reverse_read_g_to_a_counted(self, tmp_path, fasta_file):
         # Reverse read covering pos 1-9 with G->A at pos 5.
@@ -107,7 +107,7 @@ class TestQC:
         out_dir = str(tmp_path)
         m = run_qc(bam, fasta_file, out_dir, "qc", min_mapq=0, min_baseq=0, plot=False)
 
-        assert m["editing"]["total_opportunities"] == 5  # C/G at 1,2,4,5,8
+        assert m["editing"]["total_opportunities"] == 6  # C/G at 1,2,4,5,8,9
         assert m["editing"]["total_edits"] == 1
 
     def test_forward_read_g_to_a_counted(self, tmp_path, fasta_file):
@@ -274,8 +274,8 @@ class TestQC:
         html = open(html_path).read()
         assert "DeamTools QC Report" in html
         # Plot embedded and metric descriptions present.
-        assert "data:image/png;base64," in html
-        assert "global_edit_rate" in html and "Meaning" in html
+        assert "<svg" in html
+        assert "global_edit_rate" in html and "<th>Info</th>" in html
 
     def test_html_omits_image_when_no_plot(self, tmp_path, fasta_file):
         read = _make_read("r1", "ACGTTGATCG", 0, is_paired=False)
@@ -586,7 +586,7 @@ class TestFragmentMerging:
 
         # Per record this was 10 opportunities and 4 edits; the mates cover the
         # same 0-9, so the fragment sees each position exactly once.
-        assert m["editing"]["total_opportunities"] == 5
+        assert m["editing"]["total_opportunities"] == 6
         assert m["editing"]["total_edits"] == 2
         assert m["editing"]["mean_edits_per_fragment"] == pytest.approx(2.0)
         # 2 edited of 6 editable C/G, not 4 of 12.
@@ -606,7 +606,7 @@ class TestFragmentMerging:
         ]
         m = self._run(tmp_path, fasta_file, reads, min_mapq=0)
         assert m["fragments"]["total"] == 1
-        assert m["editing"]["total_opportunities"] == 5  # 1,2,4 from R1; 5,8 from R2
+        assert m["editing"]["total_opportunities"] == 6  # 1,2,4 from R1; 5,8,9 from R2
         assert m["editing"]["total_edits"] == 2
         assert m["edit_rate_per_fragment"]["mean"] == pytest.approx(2 / 6, abs=1e-6)
 
@@ -662,7 +662,7 @@ class TestFragmentMerging:
         assert m["reads"]["total"] == 3
         assert m["fragments"]["total"] == 3
         assert m["fragments"]["from_mate_pairs"] == 0
-        assert m["editing"]["total_opportunities"] == 15  # 5 per fragment
+        assert m["editing"]["total_opportunities"] == 18  # 6 per fragment
 
     def test_subsampling_keeps_both_mates_or_neither(self, tmp_path, fasta_file):
         """Sampling is keyed on the read name, so a fragment survives whole.
@@ -845,8 +845,7 @@ class TestTssEnrichment:
         fasta = str(tmp_path / "big.fa")
         with open(fasta, "w") as f:
             f.write(f">{self.CHROM}\n")
-            for _ in range(0, self.CHROM_LEN, 60):
-                f.write("ACGTCG" * 10 + "\n")
+            f.write(("ACGTCG" * (self.CHROM_LEN // 6 + 1))[: self.CHROM_LEN] + "\n")
         pysam.faidx(fasta)
 
         sites = self._flat() + [(self.TSS, False)] * 90
@@ -886,7 +885,8 @@ class TestTssEnrichment:
         assert "TSS enrichment" in html
         assert "sample.tss_enrichment.csv" in html
         # Its own plot, on top of the multi-panel summary figure.
-        assert html.count("data:image/png;base64,") >= 3
+        assert "data-chart='tss-profile'" in html
+        assert "data-chart='edits-distribution'" in html
 
 
 class TestSubsampling:
@@ -971,3 +971,335 @@ class TestSubsampling:
             full["editing"]["global_edit_rate"], abs=1e-9
         )
         assert sub["editing"]["global_edit_rate"] > 0  # the rate is real, not 0 == 0
+
+
+class TestQCRegression:
+    def test_unplaced_reads_and_filter_reasons(self, tmp_path, fasta_file):
+        reads = [
+            _make_read("pass", REF_SEQ, 0, is_paired=False),
+            _make_read("fail", REF_SEQ, 0, is_paired=False, extra_flags=0x200, mapq=0),
+        ]
+        unplaced = pysam.AlignedSegment()
+        unplaced.query_name = "unmapped"
+        unplaced.query_sequence = "ACGT"
+        unplaced.flag = 4
+        unplaced.reference_id = -1
+        unplaced.reference_start = -1
+        reads.append(unplaced)
+        bam = _write_bam(str(tmp_path / "unplaced.bam"), reads)
+        m = run_qc(bam, fasta_file, str(tmp_path), "unplaced", plot=False)
+        assert m["file_reads"] == {
+            "total": 3,
+            "mapped": 2,
+            "unmapped": 1,
+            "unplaced": 1,
+        }
+        assert m["reads"]["total"] == 3
+        assert m["reads"]["unmapped"] == 1
+        assert m["reads"]["qcfail"] == m["reads"]["low_mapq"] == 1
+        assert m["reads"]["passing"] == 1
+
+    def test_exact_overflow_statistics(self):
+        stats = qc._Stats()
+        ref = "C" * 160
+        read = _make_read("many", "T" * 150, 0, is_paired=False)
+        qc._accumulate_fragment(stats, (read,), ref, len(ref), 0)
+        m = qc._build_metrics(stats, None, "many")
+        assert m["editing"]["mean_edits_per_fragment"] == 150
+        assert m["editing"]["median_edits_per_fragment"] == 150
+        assert stats.edits_per_fragment[100] == 1
+        assert qc._count_summary({0: 1, 100: 1})["median"] == 50
+        assert qc._count_summary({100: 1, 2000: 1})["mean"] == 1050
+
+    def test_global_context_and_directions(self):
+        stats = qc._Stats()
+        ref = "CNCG"
+        read = _make_read("boundary", "TNTA", 0, is_paired=False)
+        qc._accumulate_fragment(stats, (read,), ref, len(ref), 0)
+        m = qc._build_metrics(stats, None, "boundary")
+        assert m["editing"]["total_edits"] == 3
+        assert m["editing"]["total_opportunities"] == 3
+        assert m["context_summary"]["total_opportunities"] == 0
+        assert m["editing"]["ct_edits"] == 2
+        assert m["editing"]["ga_edits"] == 1
+        assert m["editing"]["both_direction_fragments"] == 1
+        assert stats.direction_counts[(2, 1)] == 1
+
+    def test_missing_values_and_provenance(self, tmp_path, fasta_file):
+        bam = _write_bam(str(tmp_path / "empty.bam"), [])
+        bed = tmp_path / "sites.bed"
+        bed.write_text("unknown\t2\t3\nchr1\t0\t1\n")
+        m = run_qc(
+            bam,
+            fasta_file,
+            str(tmp_path),
+            "empty",
+            tss_path=str(bed),
+            tss_flank=2,
+            plot=True,
+        )
+        assert m["editing"]["global_edit_rate"] is None
+        assert m["editing"]["mean_edits_per_fragment"] is None
+        assert m["status"]["tss"] == "no_usable_tss"
+        assert m["status"]["tss_annotation"] == {
+            "input_records": 2,
+            "unknown_contig": 1,
+            "outside_contig": 1,
+        }
+        assert m["schema_version"] == "2.0"
+        assert m["provenance"]["parameters"]["min_mapq"] == 20
+        text = (tmp_path / "empty.json").read_text()
+        assert "NaN" not in text and "Infinity" not in text
+        assert "n/a" in (tmp_path / "empty.html").read_text()
+
+    def test_overlap_diagnostics(self):
+        stats = qc._Stats()
+        r1 = _make_read("pair", "ACGT", 0)
+        r2 = _make_read("pair", "ATGT", 0, is_read1=False)
+        qc._accumulate_fragment(stats, (r1, r2), "ACGT", 4, 0)
+        assert stats.diagnostics["overlap_positions"] == 4
+        assert stats.diagnostics["overlap_conflicts"] == 1
+        assert stats.diagnostics["equal_quality_conflicts"] == 1
+        assert stats.total_opportunities == 1  # conflicting C excluded; G retained
+
+    def test_opportunity_matched_background(self):
+        stats = qc._Stats()
+        ref = "A" * 6 + "C" + "A" * 6
+        read = _make_read("edited", ref[:6] + "T" + ref[7:], 0, is_paired=False)
+        qc._accumulate_fragment(stats, (read,), ref, len(ref), 0)
+        assert stats.background_events == stats.motif_events == 1
+        expected = stats.motif_pwm.copy()
+        expected[5, qc._BASE_IDX["C"]] = 1
+        assert np.array_equal(stats.background_pwm, expected)
+
+    def test_reference_mismatch_fails_early(self, tmp_path):
+        fasta = tmp_path / "short.fa"
+        fasta.write_text(">chr1\nACG\n")
+        pysam.faidx(str(fasta))
+        bam = _write_bam(str(tmp_path / "x.bam"), [])
+        with pytest.raises(ValueError, match="BAM/FASTA contig mismatch"):
+            run_qc(bam, str(fasta), str(tmp_path), "bad", plot=False)
+
+    def test_summary_preserves_sample_identity_and_missing_values(self, tmp_path):
+        from deamtools.qc.summary import run_qc_summary
+
+        paths = []
+        for index in range(2):
+            path = tmp_path / f"s{index}.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "2.0",
+                        "provenance": {"sample": f"<sample{index}>"},
+                        "editing": {"global_edit_rate": index / 10},
+                        "reads": {"passing": index + 1},
+                    }
+                )
+            )
+            paths.append(str(path))
+        rows = run_qc_summary(paths, str(tmp_path), "comparison")
+        assert [row["global_edit_rate"] for row in rows] == [0, 0.1]
+        assert rows[0]["tss_score"] is None
+        assert "&lt;sample0&gt;" in (tmp_path / "comparison.html").read_text()
+        assert len(list(csv.DictReader((tmp_path / "comparison.csv").open()))) == 2
+
+    def test_batched_tss_matches_independent_window_counts(self, tmp_path):
+        fixture = TestTssEnrichment()
+        sites = fixture._flat() + [(fixture.TSS, False)] * 7
+        bam_path = fixture._write_bam(tmp_path, sites)
+        bed = tmp_path / "overlap.bed"
+        centers = [
+            (fixture.TSS, False),
+            (fixture.TSS + 100, True),
+            (fixture.TSS, False),
+        ]
+        bed.write_text(
+            "".join(
+                f"{fixture.CHROM}\t{center}\t{center+1}\t{'-' if reverse else '+'}\n"
+                for center, reverse in centers
+            )
+        )
+        result = qc._tss_enrichment(
+            bam_path, str(bed), {fixture.CHROM: fixture.CHROM_LEN}, 0, fixture.FLANK
+        )
+        expected = np.zeros(2 * fixture.FLANK // 10)
+        for center, reverse in centers:
+            counts = np.zeros_like(expected)
+            for cut, _ in sites:
+                rel = cut - center + fixture.FLANK
+                if 0 <= rel < 2 * fixture.FLANK:
+                    counts[rel // 10] += 1
+            expected += counts[::-1] if reverse else counts
+        assert np.array_equal(result.counts, expected)
+
+
+def test_undefined_tss_is_null_in_json_and_blank_in_csv(tmp_path):
+    result = qc._TssResult(
+        float("nan"),
+        np.array([-0.5, 0.5]),
+        np.array([0.0, 2.0]),
+        np.array([np.nan, np.nan]),
+        0.0,
+        1,
+        1,
+    )
+    metrics = qc._build_metrics(qc._Stats(), result, "empty")
+    assert metrics["tss_enrichment"]["score"] is None
+    assert metrics["tss_enrichment"]["status"] == "zero_background"
+    json.dumps(metrics, allow_nan=False)
+    path = tmp_path / "tss.csv"
+    qc._write_tss_csv(str(path), result)
+    with path.open() as stream:
+        rows = list(csv.DictReader(stream))
+    assert [row["normalized"] for row in rows] == ["", ""]
+    assert [float(row["insertions"]) for row in rows] == [0, 2]
+
+
+def test_qc_summary_cli(tmp_path):
+    from deamtools.cli.main import main
+
+    report = tmp_path / "sample.json"
+    report.write_text(
+        json.dumps({"reads": {"passing": 10}, "editing": {"global_edit_rate": 0.2}})
+    )
+    assert (
+        main(["qc-summary", "--reports", str(report), "--out_dir", str(tmp_path)]) == 0
+    )
+    assert (tmp_path / "qc_summary.csv").is_file()
+    assert "legacy" in (tmp_path / "qc_summary.html").read_text()
+
+
+def test_cigar_diagnostic_denominators(tmp_path, fasta_file):
+    read = _make_read("cigar", "TTACGAGAC", 0, is_paired=False)
+    # 2S 3M 1I 1M 1D 2M: 9 query bases, 7 reference M/D bases.
+    read.cigartuples = [(4, 2), (0, 3), (1, 1), (0, 1), (2, 1), (0, 2)]
+    bam = _write_bam(str(tmp_path / "cigar.bam"), [read])
+    metrics = run_qc(bam, fasta_file, str(tmp_path), "cigar", plot=False)
+    diagnostic = metrics["diagnostics"]
+    assert diagnostic["soft_clip_rate"] == pytest.approx(2 / 9)
+    assert diagnostic["insertion_rate"] == pytest.approx(1 / 9)
+    assert diagnostic["deletion_rate"] == pytest.approx(1 / 7)
+
+
+@pytest.mark.parametrize("suffix", ["+", "name\t0\t-"])
+def test_point_tss_annotations_preserve_coordinates(tmp_path, suffix):
+    bed = tmp_path / "points.bed"
+    bed.write_text(f"chr1\t20\t20\t{suffix}\nchr1\t30\t31\t{suffix}\n")
+    assert list(qc._tss_sites(str(bed), {"chr1": 100}, 10)) == [
+        ("chr1", 20, suffix.endswith("-")),
+        ("chr1", 30, suffix.endswith("-")),
+    ]
+
+
+@pytest.mark.parametrize("coordinates", ["-1\t2", "5\t4", "bad\t4"])
+def test_invalid_tss_fails_before_bam_processing(
+    tmp_path, fasta_file, monkeypatch, coordinates
+):
+    bam = _write_bam(str(tmp_path / "empty.bam"), [])
+    bed = tmp_path / "bad.bed"
+    bed.write_text(f"chr1\t{coordinates}\t+\n")
+
+    def unexpected_scan(*args, **kwargs):
+        pytest.fail("BAM processing started before TSS validation")
+
+    monkeypatch.setattr(qc, "run_jobs", unexpected_scan)
+    with pytest.raises(ValueError, match="Invalid TSS BED record"):
+        run_qc(bam, fasta_file, str(tmp_path), "bad", tss_path=str(bed), plot=False)
+
+
+def test_point_tss_end_to_end_status_not_counted_twice(tmp_path, fasta_file):
+    bam = _write_bam(
+        str(tmp_path / "point.bam"), [_make_read("read", REF_SEQ, 0, is_paired=False)]
+    )
+    bed = tmp_path / "point.bed"
+    bed.write_text("chr1\t5\t5\t+\n")
+    metrics = run_qc(
+        bam,
+        fasta_file,
+        str(tmp_path),
+        "point",
+        tss_path=str(bed),
+        tss_flank=2,
+        plot=False,
+    )
+    assert metrics["status"]["tss_annotation"] == {
+        "input_records": 1,
+        "used_records": 1,
+    }
+    assert metrics["tss_enrichment"]["n_tss"] == 1
+
+
+def test_qc_directory_dashboard_end_to_end(tmp_path, fasta_file):
+    bam = _write_bam(
+        str(tmp_path / "dashboard.bam"), [_make_read("r", REF_SEQ, 0, is_paired=False)]
+    )
+    destination = tmp_path / "portable"
+    command = "deamtools qc --bam 'dashboard.bam' --report-dir portable"
+    metrics = run_qc(
+        bam,
+        fasta_file,
+        str(tmp_path),
+        "dashboard",
+        plot=False,
+        report_dir=str(destination),
+        command=command,
+    )
+    assert (destination / "report.html").is_file()
+    assert (destination / "assets").is_dir()
+    assert (destination / "dashboard.edits_per_fragment.csv").is_file()
+    assert not (tmp_path / "dashboard.html").exists()
+    assert metrics["provenance"]["command"] == command
+    assert json.loads((destination / "metrics.json").read_text()) == metrics
+    assert "Command (recorded argv)" in (destination / "report.html").read_text()
+
+
+def test_report_dir_option_is_parsed():
+    from deamtools.cli.main import build_parser
+
+    args = build_parser().parse_args(
+        [
+            "qc",
+            "--bam",
+            "a.bam",
+            "--fasta",
+            "a.fa",
+            "--out_dir",
+            "output",
+            "--out_name",
+            "sample",
+            "--report-dir",
+            "portable",
+        ]
+    )
+    assert args.report_dir == "portable"
+
+
+def test_redact_paths_cli_and_qc_outputs(tmp_path, fasta_file):
+    from deamtools.cli.main import build_parser
+
+    args = build_parser().parse_args(
+        [
+            "qc",
+            "--bam",
+            "a.bam",
+            "--fasta",
+            "a.fa",
+            "--out_dir",
+            "out",
+            "--out_name",
+            "s",
+            "--redact-paths",
+        ]
+    )
+    assert args.redact_paths is True
+    bam = _write_bam(
+        str(tmp_path / "private.bam"), [_make_read("r", REF_SEQ, 0, is_paired=False)]
+    )
+    metrics = run_qc(
+        bam, fasta_file, str(tmp_path), "redacted", plot=False, redact_paths=True
+    )
+    assert metrics["provenance"]["bam"] == bam
+    assert (
+        json.loads((tmp_path / "redacted.json").read_text())["provenance"]["bam"] == bam
+    )
+    assert str(tmp_path) not in (tmp_path / "redacted.html").read_text()

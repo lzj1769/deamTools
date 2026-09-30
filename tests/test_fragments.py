@@ -160,3 +160,27 @@ class TestMergeFragmentBases:
     def test_threshold_boundary_is_inclusive(self, baseq):
         frag = [_read("a", "ACGT", pos=0, baseq=baseq)]
         assert len(merge_fragment_bases(frag, baseq)) == 4
+
+
+def test_sorted_orphan_eviction_preserves_every_record():
+    from collections import Counter
+
+    import pysam
+
+    from deamtools.utils.fragments import iter_fragments
+
+    reads = []
+    for i in range(20):
+        read = pysam.AlignedSegment()
+        read.query_name = f"orphan{i}"
+        read.flag = 65
+        read.reference_id = read.next_reference_id = 0
+        read.reference_start = i * 100
+        read.next_reference_start = i * 100 + 10
+        reads.append(read)
+    diagnostic = Counter()
+    fragments = list(
+        iter_fragments(reads, coordinate_sorted=True, diagnostics=diagnostic)
+    )
+    assert [r.query_name for f in fragments for r in f] == [r.query_name for r in reads]
+    assert diagnostic["pending_mates_peak"] == 1
